@@ -14,6 +14,8 @@ public:
 
     bool intersect(const Ray &r, Hit &h, float tmin) override;
 
+    float getArea() const override;
+
 protected:
     Vector3f center;
     float radius;

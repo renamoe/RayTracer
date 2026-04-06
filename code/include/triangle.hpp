@@ -15,6 +15,10 @@ public:
 
 	bool intersect(const Ray& ray,  Hit& hit , float tmin) override;
 
+    float getArea() const override;
+
+	void sample(Vector3f &pos, Vector3f &normal) const override;
+
 	Vector3f normal;
 	Vector3f vertices[3];
 };

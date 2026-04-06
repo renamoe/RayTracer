@@ -1,4 +1,5 @@
 #include "triangle.hpp"
+#include "random.hpp"
 #include <cmath>
 
 Triangle::Triangle(const Vector3f& a, const Vector3f& b, const Vector3f& c, Material* m) : Object3D(m) {
@@ -35,4 +36,19 @@ bool Triangle::intersect(const Ray& ray,  Hit& hit , float tmin) {
     }
     hit.set(t, material, normal);
     return true;
+}
+
+float Triangle::getArea() const {
+    return 0.5 * Vector3f::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]).length();
+}
+
+void Triangle::sample(Vector3f &pos, Vector3f &normal) const {
+    float s = Random::get_float();
+    float t = Random::get_float();
+    if (s + t > 1.0f) {
+        s = 1.0f - s;
+        t = 1.0f - t;
+    }
+    pos = vertices[0] + s * (vertices[1] - vertices[0]) + t * (vertices[2] - vertices[0]);
+    normal = this->normal;
 }

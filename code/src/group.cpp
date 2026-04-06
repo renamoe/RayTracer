@@ -12,6 +12,18 @@ void Group::addObject(int index, Object3D *obj) {
     objects[index] = obj;
 }
 
-int Group::getGroupSize() {
+int Group::getGroupSize() const {
     return objects.size();
+}
+
+Object3D *Group::getGroupObject(int index) const {
+    return objects[index];
+}
+
+float Group::getArea() const {
+    float area = 0;
+    for (auto &obj : objects) {
+        area += obj->getArea();
+    }
+    return area;
 }

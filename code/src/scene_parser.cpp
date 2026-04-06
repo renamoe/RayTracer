@@ -1,6 +1,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <vector>
+#include <cmath>
+#include <algorithm>
 
 #include "scene_parser.hpp"
 #include "camera.hpp"
@@ -22,10 +25,6 @@ SceneParser::SceneParser(const char *filename) {
     group = nullptr;
     camera = nullptr;
     background_color = Vector3f(0.5, 0.5, 0.5);
-    num_lights = 0;
-    lights = nullptr;
-    num_materials = 0;
-    materials = nullptr;
     current_material = nullptr;
 
     // parse the file
@@ -46,7 +45,9 @@ SceneParser::SceneParser(const char *filename) {
     fclose(file);
     file = nullptr;
 
-    if (num_lights == 0) {
+    generateAreaLights(group);
+
+    if (lights.empty()) {
         printf("WARNING:    No lights specified\n");
     }
 }
@@ -56,15 +57,15 @@ SceneParser::~SceneParser() {
     delete group;
     delete camera;
 
-    int i;
-    for (i = 0; i < num_materials; i++) {
-        delete materials[i];
+    for (auto material : materials) {
+        delete material;
     }
-    delete[] materials;
-    for (i = 0; i < num_lights; i++) {
-        delete lights[i];
+    for (auto light : lights) {
+        delete light;
     }
-    delete[] lights;
+    for (auto obj : aux_objects) {
+        delete obj;
+    }
 }
 
 // ====================================================================
@@ -155,8 +156,8 @@ void SceneParser::parseLights() {
     // read in the number of objects
     getToken(token);
     assert (!strcmp(token, "numLights"));
-    num_lights = readInt();
-    lights = new Light *[num_lights];
+    int num_lights = readInt();
+    lights.resize(num_lights);
     // read in the objects
     int count = 0;
     while (num_lights > count) {
@@ -214,8 +215,8 @@ void SceneParser::parseMaterials() {
     // read in the number of objects
     getToken(token);
     assert (!strcmp(token, "numMaterials"));
-    num_materials = readInt();
-    materials = new Material *[num_materials];
+    int num_materials = readInt();
+    materials.resize(num_materials);
     // read in the objects
     int count = 0;
     while (num_materials > count) {
@@ -258,7 +259,7 @@ Material *SceneParser::parseMaterial() {
             break;
         }
     }
-    auto *answer = new Material(diffuseColor, specularColor, shininess);
+    auto *answer = new Material(diffuseColor, specularColor, Vector3f::ZERO, shininess);
     return answer;
 }
 
@@ -516,4 +517,39 @@ int SceneParser::readInt() {
         assert (0);
     }
     return answer;
+}
+
+void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix) {
+    if (obj == nullptr) return;
+    if (auto *group_obj = dynamic_cast<Group *>(obj)) {
+        for (int i = 0; i < group_obj->getGroupSize(); i++) {
+            generateAreaLights(group_obj->getGroupObject(i), parentMatrix);
+        }
+    } else if (auto *transform_obj = dynamic_cast<Transform *>(obj)) {
+        generateAreaLights(transform_obj->getChild(), parentMatrix * transform_obj->getMatrix());
+    } else if (auto *mesh_obj = dynamic_cast<Mesh *>(obj)) {
+        for (int i = 0; i < (int) mesh_obj->t.size(); ++i) {
+            Material *tri_mat = mesh_obj->getMaterial();
+            if (!mesh_obj->t_matIndices.empty() && mesh_obj->t_matIndices[i] >= 0 &&
+                mesh_obj->t_matIndices[i] < (int) mesh_obj->mtl_materials.size()) {
+                tri_mat = mesh_obj->mtl_materials[mesh_obj->t_matIndices[i]];
+            }
+            if (tri_mat != nullptr && tri_mat->isEmissive()) {
+                Vector3f v0 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][0]]);
+                Vector3f v1 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][1]]);
+                Vector3f v2 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][2]]);
+                auto *tri = new Triangle(v0, v1, v2, tri_mat);
+                aux_objects.push_back(tri);
+                lights.push_back(new AreaLight(tri));
+            }
+        }
+    } else {
+        std::cout << "warning: non-triangle area light is not support yet" << std::endl;
+        Material *material = obj->getMaterial();
+        if (material != nullptr && material->isEmissive()) {
+            auto *trans = new Transform(parentMatrix, obj);
+            aux_objects.push_back(trans);
+            lights.push_back(new AreaLight(trans));
+        }
+    }
 }

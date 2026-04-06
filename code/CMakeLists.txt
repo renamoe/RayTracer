@@ -38,6 +38,7 @@ SET(RayTracer_INCLUDES
         include/sphere.hpp
         include/transform.hpp
         include/triangle.hpp
+        include/random.hpp
         )
 
 SET(CMAKE_CXX_STANDARD 23)

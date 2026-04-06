@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Vector3f.h"
 #include "ray.hpp"
 #include "hit.hpp"
 #include "material.hpp"
@@ -14,6 +15,16 @@ public:
     explicit Object3D(Material *material) {
         this->material = material;
     }
+    
+    Material *getMaterial() const {
+        return material;
+    }
+
+    virtual float getArea() const {
+        return 0;
+    }
+
+    virtual void sample(Vector3f &pos, Vector3f &normal) const {}
 
     // Intersect Ray with this object. If hit, store information in hit structure.
     virtual bool intersect(const Ray &r, Hit &h, float tmin) = 0;

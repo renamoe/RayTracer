@@ -17,6 +17,7 @@ public:
             x[0] = 0; x[1] = 0; x[2] = 0;
         }
         int &operator[](const int i) { return x[i]; }
+        const int &operator[](const int i) const { return x[i]; }
         // By Computer Graphics convention, counterclockwise winding is front face
         int x[3]{};
     };
@@ -27,6 +28,8 @@ public:
     std::vector<Material*> mtl_materials;
     std::vector<int> t_matIndices;
     bool intersect(const Ray &r, Hit &h, float tmin) override;
+
+    float getArea() const override;
 
 private:
 

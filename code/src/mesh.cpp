@@ -37,9 +37,9 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
     }
 
     // Warnings like missing .mtl files are normal since we manage materials globally via the scene file.
-    // if (!reader.Warning().empty()) {
-    //     std::cout << "TinyObjReader: " << reader.Warning();
-    // }
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader: " << reader.Warning();
+    }
 
     auto& attrib = reader.GetAttrib();
     auto& shapes = reader.GetShapes();
@@ -50,6 +50,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
         mtl_materials.push_back(new Material(
             Vector3f(m.diffuse[0], m.diffuse[1], m.diffuse[2]),
             Vector3f(m.specular[0], m.specular[1], m.specular[2]),
+            Vector3f(m.emission[0], m.emission[1], m.emission[2]),
             m.shininess
         ));
     }
@@ -97,4 +98,15 @@ void Mesh::computeNormal() {
         b = Vector3f::cross(a, b);
         n[triId] = b / b.length();
     }
+}
+
+float Mesh::getArea() const {
+    float area = 0;
+    for (int triId = 0; triId < (int) t.size(); ++triId) {
+        const TriangleIndex& triIndex = t[triId];
+        Vector3f a = v[triIndex[1]] - v[triIndex[0]];
+        Vector3f b = v[triIndex[2]] - v[triIndex[0]];
+        area += 0.5 * Vector3f::cross(a, b).length();
+    }
+    return area;
 }

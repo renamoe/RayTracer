@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ostream>
 
 #include "Vector3f.h"
 #include "Vector2f.h"
@@ -319,4 +320,9 @@ bool operator == ( const Vector3f& v0, const Vector3f& v1 )
 bool operator != ( const Vector3f& v0, const Vector3f& v1 )
 {
     return !( v0 == v1 );
+}
+
+std::ostream &operator<<(std::ostream &os, const Vector3f &vector) {
+    os << "< " << vector.x() << ", " << vector.y() << ", " << vector.z() << " >";
+    return os;
 }

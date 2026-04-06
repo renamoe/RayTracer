@@ -24,3 +24,10 @@ bool Transform::intersect(const Ray &r, Hit &h, float tmin) {
     }
     return inter;
 }
+
+float Transform::getArea() const {
+    // temporarily assess
+    float s = o->getArea();
+    float det = transform.determinant();
+    return s / pow(std::abs(det), 2.0f / 3.0f);
+}

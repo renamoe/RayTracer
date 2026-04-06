@@ -28,3 +28,7 @@ bool Sphere::intersect(const Ray &r, Hit &h, float tmin) {
     h.set(t, material, normal);
     return true;
 }
+
+float Sphere::getArea() const {
+    return 4 * M_PI * radius * radius;
+}

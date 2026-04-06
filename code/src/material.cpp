@@ -1,14 +1,29 @@
 #include "material.hpp"
 #include <algorithm>
 
-Material::Material(const Vector3f &d_color, const Vector3f &s_color = Vector3f::ZERO, float s = 0) :
-            diffuseColor(d_color), specularColor(s_color), shininess(s) {
+Material::Material(const Vector3f &d_color, const Vector3f &s_color = Vector3f::ZERO, const Vector3f &e_color = Vector3f::ZERO, float s = 0) :
+            diffuseColor(d_color), specularColor(s_color), emission(e_color), shininess(s) {
+}
+
+Vector3f Material::getEmission() const {
+    return emission;
 }
 
 Vector3f Material::getDiffuseColor() const {
     return diffuseColor;
 }
 
+Vector3f Material::getSpecularColor() const {
+    return specularColor;
+}
+
+float Material::getShininess() const {
+    return shininess;
+}
+
+bool Material::isEmissive() const {
+    return emission.length() > 0;
+}
 
 Vector3f Material::Shade(const Ray &ray, const Hit &hit,
                    const Vector3f &dirToLight, const Vector3f &lightColor) {

@@ -14,7 +14,9 @@ public:
 
     bool intersect(const Ray &r, Hit &h, float tmin) override;
     void addObject(int index, Object3D *obj);
-    int getGroupSize();
+    int getGroupSize() const;
+    Object3D *getGroupObject(int index) const;
+    float getArea() const override;
 
 private:
     std::vector<Object3D*> objects;

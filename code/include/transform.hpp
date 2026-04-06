@@ -17,7 +17,12 @@ public:
 
     ~Transform() {}
 
-    virtual bool intersect(const Ray &r, Hit &h, float tmin);
+    virtual bool intersect(const Ray &r, Hit &h, float tmin) override;
+
+    float getArea() const override;
+
+    Object3D *getChild() const { return o; }
+    Matrix4f getMatrix() const { return transform.inverse(); }
 
 protected:
     Object3D *o; //un-transformed object

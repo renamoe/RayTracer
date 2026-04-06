@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <vecmath.h>
+#include <vector>
 
 class Camera;
 class Light;
@@ -33,20 +34,20 @@ public:
     }
 
     int getNumLights() const {
-        return num_lights;
+        return lights.size();
     }
 
     Light *getLight(int i) const {
-        assert(i >= 0 && i < num_lights);
+        assert(i >= 0 && i < int(lights.size()));
         return lights[i];
     }
 
     int getNumMaterials() const {
-        return num_materials;
+        return materials.size();
     }
 
     Material *getMaterial(int i) const {
-        assert(i >= 0 && i < num_materials);
+        assert(i >= 0 && i < int(materials.size()));
         return materials[i];
     }
 
@@ -71,6 +72,7 @@ private:
     Triangle *parseTriangle();
     Mesh *parseTriangleMesh();
     Transform *parseTransform();
+    void generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix = Matrix4f::identity());
 
     int getToken(char token[MAX_PARSER_TOKEN_LENGTH]);
 
@@ -82,10 +84,9 @@ private:
     FILE *file;
     Camera *camera;
     Vector3f background_color;
-    int num_lights;
-    Light **lights;
-    int num_materials;
-    Material **materials;
+    std::vector<Light*> lights;
+    std::vector<Material*> materials;
     Material *current_material;
     Group *group;
+    std::vector<Object3D*> aux_objects;
 };
