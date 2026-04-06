@@ -1,0 +1,50 @@
+# macOS system files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build directories and generated files
+build/
+bin/
+out/
+.cache/
+compile_commands.json
+
+# CMake generic files (if they end up outside build)
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+
+# C++ binaries and objects
+*.o
+# *.obj
+*.exe
+*.out
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.pdb
+
+# Rendered output images (modify as needed)
+output/
+*.ppm
+*.bmp
+*.png
+*.jpg
+*.jpeg
+
+
+# testcases/
+# mesh/
