@@ -10,6 +10,7 @@ class Mesh : public Object3D {
 
 public:
     Mesh(const char *filename, Material *m);
+    ~Mesh() override;
 
     struct TriangleIndex {
         TriangleIndex() {
@@ -23,6 +24,8 @@ public:
     std::vector<Vector3f> v;
     std::vector<TriangleIndex> t;
     std::vector<Vector3f> n;
+    std::vector<Material*> mtl_materials;
+    std::vector<int> t_matIndices;
     bool intersect(const Ray &r, Hit &h, float tmin) override;
 
 private:
