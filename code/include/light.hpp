@@ -10,6 +10,7 @@ public:
     struct SampleResult {
         Vector3f pos;
         Vector3f dir;
+        Vector3f normal;
         Vector3f col;
         float dist;
         float pdf;

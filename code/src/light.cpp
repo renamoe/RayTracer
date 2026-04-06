@@ -59,18 +59,11 @@ void AreaLight::print(std::ostream &os) const {
     os << "AreaLight " << getObject();
 }
 
-AreaLight::SampleResult AreaLight::sample(const Vector3f &p) const {
+Light::SampleResult AreaLight::sample(const Vector3f &p) const {
     SampleResult result;
-    Vector3f lightNormal;
-    object->sample(result.pos, lightNormal);
+    object->sample(result.pos, result.normal);
     result.dir = (result.pos - p).normalized();
     result.dist = (result.pos - p).length();
     result.col = object->getMaterial()->getEmission();
-    float cosThetaLight = Vector3f::dot(lightNormal, -result.dir);
-    if (cosThetaLight < 1e-6) {
-        result.pdf = 0;
-    } else {
-        result.pdf = cosThetaLight / totalArea;
-    }
     return result;
 }

@@ -3,20 +3,12 @@ PerspectiveCamera {
     direction 0 0 -1
     up 0 1 0
     angle 60
-    width 400
-    height 400
+    width 200
+    height 200
 }
 
 Lights {
-    numLights 2
-    DirectionalLight {
-        direction 0 -1 -0.5
-        color 0.2 0.2 0.2 
-    }
-    PointLight {
-      position 0 1.9 0
-      color 0.8 0.8 0.8
-    }
+    numLights 0
 }
 
 Background {
@@ -39,7 +31,7 @@ Group {
 		Scale  1 1 1 
 		Translate  0 0 0 	
         TriangleMesh {
-            obj_file mesh/CornellBox-Glossy-Floor.obj
+            obj_file mesh/CornellBox-Glossy.obj
         }
     }
 }

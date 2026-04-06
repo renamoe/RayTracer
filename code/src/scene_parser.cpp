@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -16,6 +17,7 @@
 #include "plane.hpp"
 #include "triangle.hpp"
 #include "transform.hpp"
+#include "random.hpp"
 
 #define DegreesToRadians(x) ((M_PI * x) / 180.0f)
 
@@ -46,6 +48,9 @@ SceneParser::SceneParser(const char *filename) {
     file = nullptr;
 
     generateAreaLights(group);
+    for (size_t i = 1; i < aux_sizes.size(); ++i) {
+        aux_sizes[i] += aux_sizes[i - 1];
+    }
 
     if (lights.empty()) {
         printf("WARNING:    No lights specified\n");
@@ -403,6 +408,7 @@ Mesh *SceneParser::parseTriangleMesh() {
     assert (!strcmp(token, "}"));
     const char *ext = &filename[strlen(filename) - 4];
     assert(!strcmp(ext, ".obj"));
+    std::cout << "loading mesh: " << filename << std::endl;
     Mesh *answer = new Mesh(filename, current_material);
 
     return answer;
@@ -540,6 +546,7 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
                 Vector3f v2 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][2]]);
                 auto *tri = new Triangle(v0, v1, v2, tri_mat);
                 aux_objects.push_back(tri);
+                aux_sizes.push_back(tri->getArea());
                 lights.push_back(new AreaLight(tri));
             }
         }
@@ -549,7 +556,20 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
         if (material != nullptr && material->isEmissive()) {
             auto *trans = new Transform(parentMatrix, obj);
             aux_objects.push_back(trans);
+            aux_sizes.push_back(0);
             lights.push_back(new AreaLight(trans));
         }
     }
+}
+
+Light::SampleResult SceneParser::sampleLight(const Vector3f &p) const {
+    if (aux_objects.empty()) {
+        return {};
+    }
+    float r = Random::get_float() * aux_sizes.back();
+    int i = std::lower_bound(aux_sizes.begin(), aux_sizes.end(), r) - aux_sizes.begin();
+    i += lights.size() - aux_objects.size();
+    Light::SampleResult res = lights[i]->sample(p);
+    res.pdf = 1.0 / aux_sizes.back();
+    return res;
 }

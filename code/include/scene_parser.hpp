@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Vector3f.h"
+#include "light.hpp"
 #include <cassert>
 #include <vecmath.h>
 #include <vector>
@@ -54,6 +56,8 @@ public:
     Group *getGroup() const {
         return group;
     }
+    
+    Light::SampleResult sampleLight(const Vector3f &p) const;
 
 private:
 
@@ -89,4 +93,5 @@ private:
     Material *current_material;
     Group *group;
     std::vector<Object3D*> aux_objects;
+    std::vector<float> aux_sizes;
 };
