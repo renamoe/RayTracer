@@ -61,10 +61,11 @@ Vector3f tracePath(Ray ray, int depth) {
     Vector3f wi = (T * std::cos(r1) * r2s + 
                    B * std::sin(r1) * r2s + 
                    normal * std::sqrt(1 - r2)).normalized();
-    Ray nextRay(pos + normal * 1e-4, wi);
+    Ray nextRay(pos + normal * 1e-6, wi);
     Vector3f indirect = tracePath(nextRay, depth + 1) * hit.getMaterial()->getDiffuseColor() / P_RR;
     Vector3f result = emission + direct + indirect;
     if (std::isnan(result.x()) || std::isinf(result.x())) {
+        std::cout << "nan or inf" << std::endl;
         return Vector3f::ZERO;
     }
     return result;
