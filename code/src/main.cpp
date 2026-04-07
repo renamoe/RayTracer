@@ -15,7 +15,7 @@
 #include <string>
 
 constexpr float P_RR = 0.8f;
-constexpr int NUM_SAMPLES = 32;
+constexpr int NUM_SAMPLES = 16;
 
 SceneParser *sceneParser;
 
@@ -42,7 +42,7 @@ Vector3f tracePath(Ray ray, int depth) {
         float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
         float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
         Vector3f f_r = hit.getMaterial()->getDiffuseColor() / M_PI;
-        direct = sample.col * f_r * cosThetaX * cosThetaY * sample.pdf;
+        direct = sample.col * f_r * cosThetaX * cosThetaY * sample.pdf / (sample.dist * sample.dist);
     }
     
     if (Random::get_float() > P_RR) {
@@ -63,7 +63,11 @@ Vector3f tracePath(Ray ray, int depth) {
                    normal * std::sqrt(1 - r2)).normalized();
     Ray nextRay(pos + normal * 1e-4, wi);
     Vector3f indirect = tracePath(nextRay, depth + 1) * hit.getMaterial()->getDiffuseColor() / P_RR;
-    return emission + direct + indirect;
+    Vector3f result = emission + direct + indirect;
+    if (std::isnan(result.x()) || std::isinf(result.x())) {
+        return Vector3f::ZERO;
+    }
+    return result;
 }
 
 int main(int argc, char *argv[]) {
