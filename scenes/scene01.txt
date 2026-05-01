@@ -16,7 +16,7 @@ Background {
 }
 
 Materials {
-    numMaterials 6
+    numMaterials 7
     Material {
         diffuseColor 0.8 0.8 0.8
         specularColor 0 0 0
@@ -45,6 +45,10 @@ Materials {
     }
     MirrorMaterial {
         mirrorColor 0.95 0.95 0.92
+    }
+    Material {
+        diffuseColor 0.50 0.95 0.70
+        emission 0.2 0.2 0.2
     }
 }
 
@@ -95,12 +99,13 @@ Group {
             obj_file mesh/pyramid.obj
         }
     }
-    MaterialIndex 4
+    MaterialIndex 6
     Transform {
-        Translate 0.10 0.11 0.30
-        Scale 0.15 0.15 0.15
+        Translate 0.10 0.10 0.30
+        YRotate 8
+        Scale 0.10 0.10 0.10
         TriangleMesh {
-            obj_file mesh/geodesic_classI_2.obj
+            obj_file mesh/cube.obj
         }
     }
 }

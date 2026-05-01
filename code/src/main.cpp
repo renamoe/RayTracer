@@ -185,10 +185,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Hello! Computer Graphics!" << std::endl;
 
     sceneParser = new SceneParser(inputFile.c_str());
-    std::cout << "lights: " << sceneParser->getNumLights() << "\n";
-    for (int i = 0; i < sceneParser->getNumLights(); ++i) {
-        std::cout << *sceneParser->getLight(i) << "\n";
-    }
+    std::cout << "num lights: " << sceneParser->getNumLights() << "\n";
 
     int width = sceneParser->getCamera()->getWidth();
     int height = sceneParser->getCamera()->getHeight();
