@@ -15,9 +15,24 @@
 #include <string>
 
 constexpr float P_RR = 0.8f;
-constexpr int NUM_SAMPLES = 16;
+constexpr int NUM_SAMPLES = 32;
+constexpr float EXPOSURE = 2.0f;
 
 SceneParser *sceneParser;
+
+Vector3f toneMap(Vector3f color) {
+    color = color * EXPOSURE;
+    color = Vector3f(
+        1.0f - std::exp(-std::max(0.0f, color.x())),
+        1.0f - std::exp(-std::max(0.0f, color.y())),
+        1.0f - std::exp(-std::max(0.0f, color.z()))
+    );
+    return Vector3f(
+        std::pow(color.x(), 1.0f / 2.2f),
+        std::pow(color.y(), 1.0f / 2.2f),
+        std::pow(color.z(), 1.0f / 2.2f)
+    );
+}
 
 Vector3f tracePath(Ray ray, int depth) {
     Hit hit;
@@ -42,7 +57,7 @@ Vector3f tracePath(Ray ray, int depth) {
         float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
         float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
         Vector3f f_r = hit.getMaterial()->getDiffuseColor() / M_PI;
-        direct = sample.col * f_r * cosThetaX * cosThetaY * sample.pdf / (sample.dist * sample.dist);
+        direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
     }
     
     if (Random::get_float() > P_RR) {
@@ -105,6 +120,7 @@ int main(int argc, char *argv[]) {
                 color += tracePath(ray, 0);
             }
             color = color / (float)NUM_SAMPLES;
+            color = toneMap(color);
             image.SetPixel(x, y, color);
         }
     }

@@ -555,9 +555,9 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
         Material *material = obj->getMaterial();
         if (material != nullptr && material->isEmissive()) {
             auto *trans = new Transform(parentMatrix, obj);
-            aux_objects.push_back(trans);
-            aux_sizes.push_back(0);
-            lights.push_back(new AreaLight(trans));
+            // aux_objects.push_back(trans);
+            // aux_sizes.push_back(0);
+            // lights.push_back(new AreaLight(trans));
         }
     }
 }
