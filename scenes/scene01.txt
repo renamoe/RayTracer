@@ -3,8 +3,8 @@ PerspectiveCamera {
     direction 0 -0.06 -1
     up 0 1 0
     angle 42
-    width 200
-    height 200
+    width 400
+    height 300
 }
 
 Lights {
@@ -37,20 +37,19 @@ Materials {
         specularColor 0.12 0.08 0.04
         shininess 25
     }
-    Material {
-        diffuseColor 0.88 0.96 1.0
-        specularColor 0.85 0.9 0.95
-        shininess 220
+    GlassMaterial {
+        diffuseColor 0 0 0
+        specularColor 1.0 1.0 1.0
+        transmissionColor 0.92 0.97 1.0
+        ior 1.5
     }
-    Material {
-        diffuseColor 0.78 0.78 0.76
-        specularColor 0.95 0.95 0.92
-        shininess 500
+    MirrorMaterial {
+        mirrorColor 0.95 0.95 0.92
     }
 }
 
 Group {
-    numObjects 6
+    numObjects 7
     MaterialIndex 0
     Transform {
         Translate 0 0 0
@@ -61,8 +60,8 @@ Group {
     }
     MaterialIndex 1
     Transform {
-        Translate -0.17 -0.108 -0.38
-        YRotate -18
+        Translate -0.05 -0.108 -0.10
+        YRotate 25
         UniformScale 1.6
         TriangleMesh {
             obj_file mesh/bunny_200.obj
@@ -70,30 +69,38 @@ Group {
     }
     MaterialIndex 2
     Transform {
-        Translate 0.48 0.18 -0.34
+        Translate 0.42 0.24 -0.12
         YRotate -12
-        Scale 0.18 0.18 0.18
+        Scale 0.20 0.24 0.20
         TriangleMesh {
             obj_file mesh/cube.obj
         }
     }
     MaterialIndex 4
     Sphere {
-        center 0.48 0.48 -0.34
-        radius 0.12
+        center 0.42 0.64 -0.12
+        radius 0.16
     }
     MaterialIndex 3
     Sphere {
-        center -0.57 0.11 0.20
+        center -0.30 0.11 0.20
         radius 0.11
     }
     MaterialIndex 5
     Transform {
-        Translate -0.58 0 -0.70
-        YRotate 24
-        Scale 0.15 0.28 0.15
+        Translate -0.58 0 -0.18
+        YRotate 32
+        Scale 0.18 0.44 0.18
         TriangleMesh {
             obj_file mesh/pyramid.obj
+        }
+    }
+    MaterialIndex 4
+    Transform {
+        Translate 0.10 0.11 0.30
+        Scale 0.15 0.15 0.15
+        TriangleMesh {
+            obj_file mesh/geodesic_classI_2.obj
         }
     }
 }

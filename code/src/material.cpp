@@ -1,8 +1,14 @@
 #include "material.hpp"
 #include <algorithm>
 
-Material::Material(const Vector3f &d_color, const Vector3f &s_color = Vector3f::ZERO, const Vector3f &e_color = Vector3f::ZERO, float s = 0) :
-            diffuseColor(d_color), specularColor(s_color), emission(e_color), shininess(s) {
+Material::Material(const Vector3f &d_color,
+                   const Vector3f &s_color,
+                   const Vector3f &e_color,
+                   float s,
+                   MaterialType type,
+                   const Vector3f &t_color,
+                   float ior) :
+            diffuseColor(d_color), specularColor(s_color), emission(e_color), transmissionColor(t_color), ior(ior), shininess(s), type(type) {
 }
 
 Vector3f Material::getEmission() const {
@@ -21,8 +27,28 @@ float Material::getShininess() const {
     return shininess;
 }
 
+MaterialType Material::getType() const {
+    return type;
+}
+
+bool Material::isMirror() const {
+    return type == MaterialType::MIRROR;
+}
+
+Vector3f Material::getTransmissionColor() const {
+    return transmissionColor;
+}
+
+float Material::getIOR() const {
+    return ior;
+}
+
+bool Material::isGlass() const {
+    return type == MaterialType::GLASS;
+}
+
 bool Material::isEmissive() const {
-    return emission.length() > 0;
+    return type == MaterialType::EMISSIVE || emission.length() > 0;
 }
 
 Vector3f Material::Shade(const Ray &ray, const Hit &hit,

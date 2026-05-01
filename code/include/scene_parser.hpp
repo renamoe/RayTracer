@@ -9,6 +9,7 @@
 class Camera;
 class Light;
 class Material;
+enum class MaterialType;
 class Object3D;
 class Group;
 class Sphere;
@@ -68,7 +69,7 @@ private:
     Light *parsePointLight();
     Light *parseDirectionalLight();
     void parseMaterials();
-    Material *parseMaterial();
+    Material *parseMaterial(MaterialType defaultType);
     Object3D *parseObject(char token[MAX_PARSER_TOKEN_LENGTH]);
     Group *parseGroup();
     Sphere *parseSphere();

@@ -18,11 +18,21 @@ bool Transform::intersect(const Ray &r, Hit &h, float tmin) {
     float directionLength = trDirection.length();
     trDirection = trDirection / directionLength;
     Ray tr(trSource, trDirection);
-    bool inter = o->intersect(tr, h, tmin * directionLength);
-    if (inter) {
-        h.set(h.getT() / directionLength, h.getMaterial(), transformDirection(transform.transposed(), h.getNormal()).normalized());
+    Hit localHit;
+    bool inter = o->intersect(tr, localHit, tmin * directionLength);
+    if (!inter) {
+        return false;
     }
-    return inter;
+
+    float worldT = localHit.getT() / directionLength;
+    if (worldT < tmin || worldT >= h.getT()) {
+        return false;
+    }
+
+    Vector3f worldNormal = transformDirection(transform.transposed(), localHit.getNormal()).normalized();
+
+    h.set(worldT, localHit.getMaterial(), worldNormal);
+    return true;
 }
 
 float Transform::getArea() const {

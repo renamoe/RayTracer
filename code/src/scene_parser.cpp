@@ -228,7 +228,11 @@ void SceneParser::parseMaterials() {
         getToken(token);
         if (!strcmp(token, "Material") ||
             !strcmp(token, "PhongMaterial")) {
-            materials[count] = parseMaterial();
+            materials[count] = parseMaterial(MaterialType::DIFFUSE);
+        } else if (!strcmp(token, "MirrorMaterial")) {
+            materials[count] = parseMaterial(MaterialType::MIRROR);
+        } else if (!strcmp(token, "GlassMaterial")) {
+            materials[count] = parseMaterial(MaterialType::GLASS);
         } else {
             printf("Unknown token in parseMaterial: '%s'\n", token);
             exit(0);
@@ -240,12 +244,37 @@ void SceneParser::parseMaterials() {
 }
 
 
-Material *SceneParser::parseMaterial() {
+static MaterialType parseMaterialTypeName(const char *typeName) {
+    if (!strcmp(typeName, "diffuse") || !strcmp(typeName, "Diffuse") ||
+        !strcmp(typeName, "phong") || !strcmp(typeName, "Phong")) {
+        return MaterialType::DIFFUSE;
+    }
+    if (!strcmp(typeName, "mirror") || !strcmp(typeName, "Mirror")) {
+        return MaterialType::MIRROR;
+    }
+    if (!strcmp(typeName, "emissive") || !strcmp(typeName, "Emissive")) {
+        return MaterialType::EMISSIVE;
+    }
+    if (!strcmp(typeName, "glass") || !strcmp(typeName, "Glass")) {
+        return MaterialType::GLASS;
+    }
+    printf("Unknown material type '%s'\n", typeName);
+    exit(0);
+}
+
+Material *SceneParser::parseMaterial(MaterialType defaultType) {
     char token[MAX_PARSER_TOKEN_LENGTH];
     char filename[MAX_PARSER_TOKEN_LENGTH];
     filename[0] = 0;
-    Vector3f diffuseColor(1, 1, 1), specularColor(0, 0, 0);
+    MaterialType type = defaultType;
+    Vector3f diffuseColor = defaultType == MaterialType::MIRROR ? Vector3f::ZERO : Vector3f(1, 1, 1);
+    Vector3f specularColor = defaultType == MaterialType::MIRROR ? Vector3f(1, 1, 1) : Vector3f::ZERO;
+    Vector3f emission = Vector3f::ZERO;
     float shininess = 0;
+    float ior = 1.5f;
+    Vector3f transmissionColor = Vector3f(1, 1, 1);
+    bool hasSpecularColor = false;
+    bool hasMirrorColor = false;
     getToken(token);
     assert (!strcmp(token, "{"));
     while (true) {
@@ -254,8 +283,27 @@ Material *SceneParser::parseMaterial() {
             diffuseColor = readVector3f();
         } else if (strcmp(token, "specularColor") == 0) {
             specularColor = readVector3f();
+            hasSpecularColor = true;
+        } else if (strcmp(token, "mirrorColor") == 0 ||
+                   strcmp(token, "reflectance") == 0 ||
+                   strcmp(token, "reflectionColor") == 0) {
+            specularColor = readVector3f();
+            hasMirrorColor = true;
+        } else if (strcmp(token, "ior") == 0 ||
+            strcmp(token, "refractiveIndex") == 0) {
+            ior = readFloat();
+        } else if (strcmp(token, "transmissionColor") == 0 ||
+                strcmp(token, "transmittance") == 0) {
+            transmissionColor = readVector3f();
         } else if (strcmp(token, "shininess") == 0) {
             shininess = readFloat();
+        } else if (strcmp(token, "type") == 0 ||
+                   strcmp(token, "materialType") == 0) {
+            getToken(token);
+            type = parseMaterialTypeName(token);
+        } else if (strcmp(token, "emission") == 0 ||
+                   strcmp(token, "emissionColor") == 0) {
+            emission = readVector3f();
         } else if (strcmp(token, "texture") == 0) {
             // Optional: read in texture and draw it.
             getToken(filename);
@@ -264,7 +312,13 @@ Material *SceneParser::parseMaterial() {
             break;
         }
     }
-    auto *answer = new Material(diffuseColor, specularColor, Vector3f::ZERO, shininess);
+    if (type == MaterialType::MIRROR && !hasSpecularColor && !hasMirrorColor) {
+        specularColor = diffuseColor.length() > 0 ? diffuseColor : Vector3f(1, 1, 1);
+    }
+    if (emission.length() > 0) {
+        type = MaterialType::EMISSIVE;
+    }
+    auto *answer = new Material(diffuseColor, specularColor, emission, shininess, type, transmissionColor, ior);
     return answer;
 }
 

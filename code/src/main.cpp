@@ -34,35 +34,113 @@ Vector3f toneMap(Vector3f color) {
     );
 }
 
-Vector3f tracePath(Ray ray, int depth) {
+Vector3f reflect(const Vector3f &I, const Vector3f &N) {
+    return (I - 2 * Vector3f::dot(I, N) * N).normalized();
+}
+
+bool refract(const Vector3f &I,
+             const Vector3f &N,
+             float etaI,
+             float etaT,
+             Vector3f &T) {
+    float cosI = std::max(-1.0f, std::min(1.0f, Vector3f::dot(I, N)));
+    Vector3f n = N;
+    if (cosI < 0.0f) {
+        cosI = -cosI;
+    } else {
+        std::swap(etaI, etaT);
+        n = -N;
+    }
+
+    float eta = etaI / etaT;
+    float k = 1.0f - eta * eta * (1.0f - cosI * cosI);
+
+    if (k < 0.0f) {
+        return false;
+    }
+    T = (eta * I + (eta * cosI - std::sqrt(k)) * n).normalized();
+    return true;
+}
+
+float fresnelSchlick(const Vector3f &I, const Vector3f &N, float etaI, float etaT) {
+    float cosTheta = std::max(-1.0f, std::min(1.0f, Vector3f::dot(I, N)));
+    if (cosTheta > 0.0f) {
+        std::swap(etaI, etaT);
+    }
+
+    float r0 = (etaI - etaT) / (etaI + etaT);
+    r0 = r0 * r0;
+    return r0 + (1.0f - r0) * std::pow(1.0f - std::abs(cosTheta), 5.0f);
+}
+
+
+Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     Hit hit;
     if (!sceneParser->getGroup()->intersect(ray, hit, 0)) {
         return sceneParser->getBackgroundColor();
     }
+    Material *material = hit.getMaterial();
     Vector3f emission = Vector3f::ZERO;
-    if (depth == 0) {
-        emission = hit.getMaterial()->getEmission();
+    if (depth == 0 || fromSpecular) {
+        emission = material->getEmission();
     }
 
     Vector3f pos = ray.pointAtParameter(hit.getT());
     Vector3f normal = hit.getNormal();
+
+    if (material->isMirror()) {
+        if (Random::get_float() > P_RR) {
+            return emission;
+        }
+        Vector3f wi = reflect(ray.getDirection(), normal);
+        Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
+        Ray nextRay(pos + offsetNormal * 1e-6, wi);
+        return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+    }
+
+    if (material->isGlass()) {
+        if (Random::get_float() > P_RR) {
+            return emission;
+        }
+        
+        Vector3f reflected = reflect(ray.getDirection(), normal);
+
+        Vector3f refracted;
+        float etaI = 1.0f;
+        float etaT = material->getIOR();
+        bool canRefract = refract(ray.getDirection(), normal, etaI, etaT, refracted);
+        float kr = canRefract ? fresnelSchlick(ray.getDirection(), normal, etaI, etaT) : 1.0f;
+        
+        if (Random::get_float() < kr) {
+            Vector3f offsetNormal = Vector3f::dot(reflected, normal) > 0 ? normal : -normal;
+            Ray nextRay(pos + offsetNormal * 1e-6, reflected);
+            return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+        } else {
+            Vector3f offsetNormal = Vector3f::dot(refracted, normal) > 0 ? normal : -normal;
+            Ray nextRay(pos + offsetNormal * 1e-6, refracted);
+            return emission + tracePath(nextRay, depth + 1, true) * material->getTransmissionColor() / P_RR;
+        }
+    }
     
     Light::SampleResult sample = sceneParser->sampleLight(pos);
     Vector3f direct = Vector3f::ZERO;
-    Vector3f shadowOrigin = pos + normal * 1e-6;
-    Ray shadowRay(shadowOrigin, sample.dir);
-    Hit shadowHit;
-    sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-    if (shadowHit.getT() > sample.dist - 1e-4) {
-        float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
-        float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-        Vector3f f_r = hit.getMaterial()->getDiffuseColor() / M_PI;
-        direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
+    if (sample.pdf > 0.0f && sample.dist > 0.0f) {
+        Vector3f shadowOrigin = pos + normal * 1e-6;
+        Ray shadowRay(shadowOrigin, sample.dir);
+        Hit shadowHit;
+        sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
+        if (shadowHit.getT() > sample.dist - 1e-4) {
+            float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
+            float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
+            Vector3f f_r = material->getDiffuseColor() / M_PI;
+            direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
+        }
     }
     
     if (Random::get_float() > P_RR) {
         return emission + direct;
     }
+
     Vector3f T, B;
     if (std::abs(normal.x()) > 0.9f) {
         T = Vector3f::cross(Vector3f(0, 1, 0), normal).normalized();
@@ -77,7 +155,7 @@ Vector3f tracePath(Ray ray, int depth) {
                    B * std::sin(r1) * r2s + 
                    normal * std::sqrt(1 - r2)).normalized();
     Ray nextRay(pos + normal * 1e-6, wi);
-    Vector3f indirect = tracePath(nextRay, depth + 1) * hit.getMaterial()->getDiffuseColor() / P_RR;
+    Vector3f indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
     Vector3f result = emission + direct + indirect;
     if (std::isnan(result.x()) || std::isinf(result.x())) {
         std::cout << "nan or inf" << std::endl;
@@ -91,12 +169,18 @@ int main(int argc, char *argv[]) {
         std::cout << "Argument " << argNum << " is: " << argv[argNum] << std::endl;
     }
 
-    if (argc != 3) {
-        std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file>" << std::endl;
+    if (argc != 3 && argc != 4) {
+        std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> [num_samples]" << std::endl;
         return 1;
     }
     std::string inputFile = argv[1];
     std::string outputFile = argv[2];  // only bmp is allowed.
+    int numSamples = argc == 4 ? std::atoi(argv[3]) : NUM_SAMPLES;
+    if (numSamples <= 0) {
+        std::cout << "num samples must be a positive integer" << std::endl;
+        return 1;
+    }
+    std::cout << "num samples per pixel: " << numSamples << std::endl;
 
     std::cout << "Hello! Computer Graphics!" << std::endl;
 
@@ -113,13 +197,13 @@ int main(int argc, char *argv[]) {
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
             Vector3f color = Vector3f::ZERO;
-            for (int i = 0; i < NUM_SAMPLES; ++i) {
+            for (int i = 0; i < numSamples; ++i) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = sceneParser->getCamera()->generateRay(Vector2f(x + dx, y + dy));
                 color += tracePath(ray, 0);
             }
-            color = color / (float)NUM_SAMPLES;
+            color = color / (float)numSamples;
             color = toneMap(color);
             image.SetPixel(x, y, color);
         }
