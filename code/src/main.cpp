@@ -1,6 +1,8 @@
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 
 #include "Vector3f.h"
@@ -13,6 +15,10 @@
 
 #include <cmath>
 #include <string>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 constexpr float P_RR = 0.8f;
 constexpr int NUM_SAMPLES = 32;
@@ -215,6 +221,8 @@ int main(int argc, char *argv[]) {
     int width = sceneParser->getCamera()->getWidth();
     int height = sceneParser->getCamera()->getHeight();
     Image image(width, height);
+
+    const auto renderStart = std::chrono::steady_clock::now();
     #pragma omp parallel for schedule(dynamic, 1)
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
@@ -230,6 +238,27 @@ int main(int argc, char *argv[]) {
             image.SetPixel(x, y, color);
         }
     }
+    const auto renderEnd = std::chrono::steady_clock::now();
+
+    const double renderSeconds =
+        std::chrono::duration<double>(renderEnd - renderStart).count();
+    const long long numPixels = static_cast<long long>(width) * height;
+    const long long primarySamples = numPixels * static_cast<long long>(numSamples);
+
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << "[render stats] resolution: " << width << "x" << height
+              << ", spp: " << numSamples;
+#ifdef _OPENMP
+    std::cout << ", threads: " << omp_get_max_threads();
+#endif
+    std::cout << "\n";
+    std::cout << "[render stats] total render time: " << renderSeconds << " s\n";
+    std::cout << "[render stats] avg time per spp: "
+              << renderSeconds / static_cast<double>(numSamples) << " s\n";
+    std::cout << "[render stats] throughput: "
+              << numPixels / renderSeconds << " pixels/s, "
+              << primarySamples / renderSeconds << " primary samples/s\n";
+    
     image.SaveBMP(outputFile.c_str());
 
     delete sceneParser;
