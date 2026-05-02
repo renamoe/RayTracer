@@ -242,6 +242,7 @@ int main(int argc, char *argv[]) {
 
     const double renderSeconds =
         std::chrono::duration<double>(renderEnd - renderStart).count();
+    const double statsSeconds = renderSeconds > 0.0 ? renderSeconds : 1e-9;
     const long long numPixels = static_cast<long long>(width) * height;
     const long long primarySamples = numPixels * static_cast<long long>(numSamples);
 
@@ -253,11 +254,13 @@ int main(int argc, char *argv[]) {
 #endif
     std::cout << "\n";
     std::cout << "[render stats] total render time: " << renderSeconds << " s\n";
-    std::cout << "[render stats] avg time per spp: "
-              << renderSeconds / static_cast<double>(numSamples) << " s\n";
+    std::cout << "[render stats] avg time per full-image spp: "
+              << statsSeconds / static_cast<double>(numSamples) << " s\n";
+    std::cout << "[render stats] avg time per primary sample: "
+              << statsSeconds * 1000000.0 / static_cast<double>(primarySamples) << " us\n";
     std::cout << "[render stats] throughput: "
-              << numPixels / renderSeconds << " pixels/s, "
-              << primarySamples / renderSeconds << " primary samples/s\n";
+              << numPixels / statsSeconds << " pixels/s, "
+              << primarySamples / statsSeconds << " primary samples/s\n";
     
     image.SaveBMP(outputFile.c_str());
 
