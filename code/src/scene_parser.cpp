@@ -591,16 +591,12 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
     } else if (auto *transform_obj = dynamic_cast<Transform *>(obj)) {
         generateAreaLights(transform_obj->getChild(), parentMatrix * transform_obj->getMatrix());
     } else if (auto *mesh_obj = dynamic_cast<Mesh *>(obj)) {
-        for (int i = 0; i < (int) mesh_obj->t.size(); ++i) {
-            Material *tri_mat = mesh_obj->getMaterial();
-            if (!mesh_obj->t_matIndices.empty() && mesh_obj->t_matIndices[i] >= 0 &&
-                mesh_obj->t_matIndices[i] < (int) mesh_obj->mtl_materials.size()) {
-                tri_mat = mesh_obj->mtl_materials[mesh_obj->t_matIndices[i]];
-            }
+        for (int i = 0; i < (int) mesh_obj->tris.size(); ++i) {
+            Material *tri_mat = mesh_obj->getTriangleMaterial(i);
             if (tri_mat != nullptr && tri_mat->isEmissive()) {
-                Vector3f v0 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][0]]);
-                Vector3f v1 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][1]]);
-                Vector3f v2 = transformPoint(parentMatrix, mesh_obj->v[mesh_obj->t[i][2]]);
+                Vector3f v0 = transformPoint(parentMatrix, mesh_obj->verts[mesh_obj->tris[i][0]]);
+                Vector3f v1 = transformPoint(parentMatrix, mesh_obj->verts[mesh_obj->tris[i][1]]);
+                Vector3f v2 = transformPoint(parentMatrix, mesh_obj->verts[mesh_obj->tris[i][2]]);
                 auto *tri = new Triangle(v0, v1, v2, tri_mat);
                 aux_objects.push_back(tri);
                 aux_sizes.push_back(tri->getArea());

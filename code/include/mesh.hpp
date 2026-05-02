@@ -5,6 +5,32 @@
 #include "Vector2f.h"
 #include "Vector3f.h"
 
+struct AABB {
+    Vector3f min;
+    Vector3f max;
+
+    AABB() : min(Vector3f::ZERO), max(Vector3f::ZERO) {}
+    AABB(const Vector3f &p) : min(p), max(p) {}
+    AABB(const Vector3f &a, const Vector3f &b, const Vector3f &c);
+    void expand(const AABB &other);
+    int longestAxis() const;
+    bool intersect(const Ray &ray, float tmin, float tmax) const;
+};
+
+struct BVHNode {
+    AABB box;
+    BVHNode *left;
+    BVHNode *right;
+    int start;
+    int count;
+    
+    BVHNode() : box(), left(nullptr), right(nullptr), start(0), count(0) {}
+    ~BVHNode() {
+        if (left) delete left;
+        if (right) delete right;
+    }
+};
+
 
 class Mesh : public Object3D {
 
@@ -20,14 +46,10 @@ public:
         const int &operator[](const int i) const { return x[i]; }
         // By Computer Graphics convention, counterclockwise winding is front face
         int x[3]{};
+        int matIndex = -1;
     };
-
-    std::vector<Vector3f> v;
-    std::vector<TriangleIndex> t;
-    std::vector<Vector3f> n;
-    std::vector<Material*> mtl_materials;
-    std::vector<int> t_matIndices;
     bool intersect(const Ray &r, Hit &h, float tmin) override;
+    Material *getTriangleMaterial(int triId) const;
 
     float getArea() const override;
 
@@ -35,5 +57,20 @@ private:
 
     // Normal can be used for light estimation
     void computeNormal();
+    void computeBoxesAndCentroids();
+
+    BVHNode* buildBVH(int start, int end);
+    bool intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) const;
+
+public:
+    std::vector<Vector3f> verts;
+    std::vector<TriangleIndex> tris;
+    std::vector<Vector3f> normals;
+    std::vector<Material*> mtl_materials;
+private:
+    std::vector<int> triIds;
+    std::vector<AABB> triBoxes;
+    std::vector<Vector3f> triCentroids;
+    BVHNode* bvhRoot = nullptr;
 };
 
