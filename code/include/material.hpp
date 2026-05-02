@@ -23,7 +23,8 @@ public:
                       float s = 0,
                       MaterialType type = MaterialType::DIFFUSE,
                       const Vector3f &t_color = Vector3f(1, 1, 1),
-                      float ior = 1.5f);
+                      float ior = 1.5f,
+                      float r = 0.1f);
 
     virtual ~Material() = default;
 
@@ -43,6 +44,8 @@ public:
     
     float getIOR() const;
 
+    float getRoughness() const;
+
     bool isGlass() const;
 
     bool isEmissive() const;
@@ -57,6 +60,7 @@ protected:
     Vector3f transmissionColor;
     float ior;
     float shininess;
+    float roughness;
     MaterialType type;
 };
 

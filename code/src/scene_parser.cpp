@@ -272,6 +272,7 @@ Material *SceneParser::parseMaterial(MaterialType defaultType) {
     Vector3f emission = Vector3f::ZERO;
     float shininess = 0;
     float ior = 1.5f;
+    float roughness = 0.1f;
     Vector3f transmissionColor = Vector3f(1, 1, 1);
     bool hasSpecularColor = false;
     bool hasMirrorColor = false;
@@ -304,6 +305,8 @@ Material *SceneParser::parseMaterial(MaterialType defaultType) {
         } else if (strcmp(token, "emission") == 0 ||
                    strcmp(token, "emissionColor") == 0) {
             emission = readVector3f();
+        } else if (strcmp(token, "roughness") == 0) {
+            roughness = readFloat();
         } else if (strcmp(token, "texture") == 0) {
             // Optional: read in texture and draw it.
             getToken(filename);
@@ -318,7 +321,7 @@ Material *SceneParser::parseMaterial(MaterialType defaultType) {
     if (emission.length() > 0) {
         type = MaterialType::EMISSIVE;
     }
-    auto *answer = new Material(diffuseColor, specularColor, emission, shininess, type, transmissionColor, ior);
+    auto *answer = new Material(diffuseColor, specularColor, emission, shininess, type, transmissionColor, ior, roughness);
     return answer;
 }
 

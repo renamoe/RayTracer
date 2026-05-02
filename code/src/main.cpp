@@ -73,6 +73,30 @@ float fresnelSchlick(const Vector3f &I, const Vector3f &N, float etaI, float eta
     return r0 + (1.0f - r0) * std::pow(1.0f - std::abs(cosTheta), 5.0f);
 }
 
+Vector3f sampleGlossyDirection(const Vector3f &R, float roughness) {
+    roughness = std::max(0.001f, roughness);
+
+    float exponent = std::max(1.0f, 2.0f / (roughness * roughness) - 2.0f);
+
+    Vector3f W = R.normalized();
+    Vector3f U;
+    if (std::abs(W.x()) > 0.9f) {
+        U = Vector3f::cross(Vector3f(0, 1, 0), W).normalized();
+    } else {
+        U = Vector3f::cross(Vector3f(1, 0, 0), W).normalized();
+    }
+    Vector3f V = Vector3f::cross(W, U).normalized();
+
+    float r1 = 2.0f * M_PI * Random::get_float();
+    float r2 = Random::get_float();
+
+    float cosTheta = std::pow(r2, 1.0f / (exponent + 1.0f));
+    float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+
+    return (U * std::cos(r1) * sinTheta +
+            V * std::sin(r1) * sinTheta +
+            W * cosTheta).normalized();
+}
 
 Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     Hit hit;
@@ -92,7 +116,8 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         if (Random::get_float() > P_RR) {
             return emission;
         }
-        Vector3f wi = reflect(ray.getDirection(), normal);
+        Vector3f R = reflect(ray.getDirection(), normal);
+        Vector3f wi = sampleGlossyDirection(R, material->getRoughness());
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
         return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;

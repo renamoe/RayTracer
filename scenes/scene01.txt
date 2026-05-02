@@ -16,7 +16,7 @@ Background {
 }
 
 Materials {
-    numMaterials 7
+    numMaterials 8
     Material {
         diffuseColor 0.8 0.8 0.8
         specularColor 0 0 0
@@ -44,16 +44,23 @@ Materials {
         ior 1.5
     }
     MirrorMaterial {
-        mirrorColor 0.95 0.95 0.92
+        mirrorColor 0.9 0.9 0.9
+        roughness 0.05
     }
-    Material {
-        diffuseColor 0.50 0.95 0.70
-        emission 0.2 0.2 0.2
+    GlassMaterial {
+        diffuseColor 0.52 0.74 0.9
+        specularColor 1.0 1.0 1.0
+        transmissionColor 0.92 0.97 1.0
+        ior 1.5
+    }
+    MirrorMaterial {
+        mirrorColor 0.9 0.9 0.9
+        roughness 0.1
     }
 }
 
 Group {
-    numObjects 7
+    numObjects 8
     MaterialIndex 0
     Transform {
         Translate 0 0 0
@@ -99,7 +106,7 @@ Group {
             obj_file mesh/pyramid.obj
         }
     }
-    MaterialIndex 6
+    MaterialIndex 4
     Transform {
         Translate 0.10 0.10 0.30
         YRotate 8
@@ -107,5 +114,10 @@ Group {
         TriangleMesh {
             obj_file mesh/cube.obj
         }
+    }
+    MaterialIndex 7
+    Sphere {
+        center 0.05 0.46 -0.24
+        radius 0.13
     }
 }

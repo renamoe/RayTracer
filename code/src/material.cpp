@@ -7,8 +7,9 @@ Material::Material(const Vector3f &d_color,
                    float s,
                    MaterialType type,
                    const Vector3f &t_color,
-                   float ior) :
-            diffuseColor(d_color), specularColor(s_color), emission(e_color), transmissionColor(t_color), ior(ior), shininess(s), type(type) {
+                   float ior,
+                   float r) :
+            diffuseColor(d_color), specularColor(s_color), emission(e_color), transmissionColor(t_color), ior(ior), shininess(s), roughness(r), type(type) {
 }
 
 Vector3f Material::getEmission() const {
@@ -41,6 +42,10 @@ Vector3f Material::getTransmissionColor() const {
 
 float Material::getIOR() const {
     return ior;
+}
+
+float Material::getRoughness() const {
+    return roughness;
 }
 
 bool Material::isGlass() const {
