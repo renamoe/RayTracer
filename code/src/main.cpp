@@ -23,6 +23,7 @@
 constexpr float P_RR = 0.8f;
 constexpr int NUM_SAMPLES = 32;
 constexpr float EXPOSURE = 2.0f;
+constexpr int MAX_DEPTH = 8;
 
 SceneParser *sceneParser;
 
@@ -122,6 +123,10 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     Vector3f emission = Vector3f::ZERO;
     if (depth == 0 || fromSpecular) {
         emission = material->getEmission();
+    }
+
+    if (depth >= MAX_DEPTH) {
+        return emission;
     }
 
     Vector3f pos = ray.pointAtParameter(hit.getT());
