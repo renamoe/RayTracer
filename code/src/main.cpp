@@ -79,7 +79,14 @@ float fresnelSchlick(const Vector3f &I, const Vector3f &N, float etaI, float eta
     return r0 + (1.0f - r0) * std::pow(1.0f - std::abs(cosTheta), 5.0f);
 }
 
-Vector3f sampleGlossyDirection(const Vector3f &R, float roughness) {
+struct GlossySample {
+    Vector3f dir;
+    float pdf;
+    float cosAlpha;
+    float exponent;
+};
+
+GlossySample sampleGlossyDirection(const Vector3f &R, float roughness) {
     roughness = std::max(0.001f, roughness);
 
     float exponent = std::max(1.0f, 2.0f / (roughness * roughness) - 2.0f);
@@ -99,9 +106,11 @@ Vector3f sampleGlossyDirection(const Vector3f &R, float roughness) {
     float cosTheta = std::pow(r2, 1.0f / (exponent + 1.0f));
     float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
 
-    return (U * std::cos(r1) * sinTheta +
-            V * std::sin(r1) * sinTheta +
-            W * cosTheta).normalized();
+    Vector3f wi = (U * std::cos(r1) * sinTheta +
+                   V * std::sin(r1) * sinTheta +
+                   W * cosTheta).normalized();
+    float pdf = (exponent + 1.0f) * std::pow(cosTheta, exponent) / (2.0f * M_PI);
+    return {wi, pdf, cosTheta, exponent};
 }
 
 Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
@@ -122,11 +131,24 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         if (Random::get_float() > P_RR) {
             return emission;
         }
-        Vector3f R = reflect(ray.getDirection(), normal);
-        Vector3f wi = sampleGlossyDirection(R, material->getRoughness());
+        Vector3f shadingNormal = normal;
+        if (Vector3f::dot(ray.getDirection(), shadingNormal) > 0.0f) {
+            shadingNormal = -shadingNormal;
+        }
+        Vector3f R = reflect(ray.getDirection(), shadingNormal);
+        GlossySample sample = sampleGlossyDirection(R, material->getRoughness());
+        float cosTheta = Vector3f::dot(sample.dir, shadingNormal);
+        if (cosTheta <= 0.0f || sample.pdf <= 0.0f) {
+            return emission;
+        }
+        Vector3f glossyBRDF = material->getSpecularColor() *
+                              ((sample.exponent + 2.0f) *
+                               std::pow(sample.cosAlpha, sample.exponent) /
+                               (2.0f * M_PI));
+        Vector3f wi = sample.dir;
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
-        return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+        return emission + tracePath(nextRay, depth + 1, true) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
     }
 
     if (material->isGlass()) {
