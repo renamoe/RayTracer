@@ -84,56 +84,104 @@ float fresnelSchlick(const Vector3f &I, const Vector3f &N, float etaI, float eta
 struct GlossySample {
     Vector3f dir;
     float pdf;
-    float cosAlpha;
-    float exponent;
 };
 
-float glossyExponentFromRoughness(float roughness) {
-    roughness = std::max(0.001f, roughness);
-    return std::max(1.0f, 2.0f / (roughness * roughness) - 2.0f);
+float clamp01(float x) {
+    return std::max(0.0f, std::min(1.0f, x));
 }
 
-Vector3f evaluateGlossyBRDF(const Vector3f &specularColor,
-                            const Vector3f &R,
-                            const Vector3f &wi,
-                            float exponent) {
-    float cosAlpha = std::max(0.0f, Vector3f::dot(R.normalized(), wi.normalized()));
-    if (cosAlpha <= 0.0f) {
+Vector3f fresnelSchlickColor(float cosTheta, const Vector3f &F0) {
+    float f = std::pow(1.0f - clamp01(cosTheta), 5.0f);
+    return F0 + (Vector3f(1, 1, 1) - F0) * f;
+}
+
+float distributionGGX(const Vector3f &N, const Vector3f &H, float roughness) {
+    float alpha = std::max(0.001f, roughness * roughness);
+    float a2 = alpha * alpha;
+    float NoH = clamp01(Vector3f::dot(N, H));
+    float NoH2 = NoH * NoH;
+
+    float denom = NoH2 * (a2 - 1.0f) + 1.0f;
+    return a2 / (M_PI * denom * denom);
+}
+
+float geometrySmithGGX(const Vector3f &N, const Vector3f &V, const Vector3f &L, float roughness) {
+    float alpha = std::max(0.001f, roughness * roughness);
+    float a2 = alpha * alpha;
+
+    auto G1 = [a2](float NoX) {
+        NoX = std::max(0.0f, NoX);
+        return 2.0f * NoX / (NoX + std::sqrt(a2 + (1.0f - a2) * NoX * NoX));
+    };
+
+    return G1(Vector3f::dot(N, V)) * G1(Vector3f::dot(N, L));
+}
+
+Vector3f evaluateCookTorranceGGX(const Vector3f &N,
+                                 const Vector3f &V,
+                                 const Vector3f &L,
+                                 const Vector3f &F0,
+                                 float roughness) {
+    float NoV = clamp01(Vector3f::dot(N, V));
+    float NoL = clamp01(Vector3f::dot(N, L));
+    if (NoV <= 0.0f || NoL <= 0.0f) {
         return Vector3f::ZERO;
     }
-    return specularColor * ((exponent + 2.0f) * std::pow(cosAlpha, exponent) / (2.0f * M_PI));
+
+    Vector3f H = (V + L).normalized();
+    float VoH = clamp01(Vector3f::dot(V, H));
+
+    float D = distributionGGX(N, H, roughness);
+    float G = geometrySmithGGX(N, V, L, roughness);
+    Vector3f F = fresnelSchlickColor(VoH, F0);
+
+    return F * (D * G / std::max(4.0f * NoV * NoL, 1e-6f));
 }
 
-GlossySample sampleGlossyDirection(const Vector3f &R, float roughness) {
-    float exponent = glossyExponentFromRoughness(roughness);
-
-    Vector3f W = R.normalized();
-    Vector3f U;
-    if (std::abs(W.x()) > 0.9f) {
-        U = Vector3f::cross(Vector3f(0, 1, 0), W).normalized();
+GlossySample sampleGGXDirection(const Vector3f &N,
+                                const Vector3f &V,
+                                float roughness) {
+    Vector3f T;
+    if (std::abs(N.x()) > 0.9f) {
+        T = Vector3f::cross(Vector3f(0, 1, 0), N).normalized();
     } else {
-        U = Vector3f::cross(Vector3f(1, 0, 0), W).normalized();
+        T = Vector3f::cross(Vector3f(1, 0, 0), N).normalized();
     }
-    Vector3f V = Vector3f::cross(W, U).normalized();
+    Vector3f B = Vector3f::cross(N, T).normalized();
 
-    float r1 = 2.0f * M_PI * Random::get_float();
-    float r2 = Random::get_float();
+    float u1 = Random::get_float();
+    float u2 = Random::get_float();
+    float alpha = std::max(0.001f, roughness * roughness);
+    float a2 = alpha * alpha;
 
-    float cosTheta = std::pow(r2, 1.0f / (exponent + 1.0f));
+    float phi = 2.0f * M_PI * u1;
+    float cosTheta = std::sqrt((1.0f - u2) / std::max(1.0f + (a2 - 1.0f) * u2, 1e-6f));
     float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
 
-    Vector3f wi = (U * std::cos(r1) * sinTheta +
-                   V * std::sin(r1) * sinTheta +
-                   W * cosTheta).normalized();
-    float pdf = (exponent + 1.0f) * std::pow(cosTheta, exponent) / (2.0f * M_PI);
-    return {wi, pdf, cosTheta, exponent};
+    Vector3f H = (T * std::cos(phi) * sinTheta +
+                  B * std::sin(phi) * sinTheta +
+                  N * cosTheta).normalized();
+    if (Vector3f::dot(V, H) <= 0.0f) {
+        H = -H;
+    }
+
+    Vector3f wi = reflect(-V, H);
+    float NoL = clamp01(Vector3f::dot(N, wi));
+    float NoH = clamp01(Vector3f::dot(N, H));
+    float VoH = clamp01(Vector3f::dot(V, H));
+    if (NoL <= 0.0f || NoH <= 0.0f || VoH <= 0.0f) {
+        return {Vector3f::ZERO, 0.0f};
+    }
+
+    float pdfH = distributionGGX(N, H, roughness) * NoH;
+    float pdfWi = pdfH / std::max(4.0f * VoH, 1e-6f);
+    return {wi.normalized(), pdfWi};
 }
 
 Vector3f estimateGlossyDirectLight(const Vector3f &pos,
                                    const Vector3f &normal,
-                                   const Vector3f &R,
-                                   Material *material,
-                                   float exponent) {
+                                   const Vector3f &rayDir,
+                                   Material *material) {
     Light::SampleResult lightSample = sceneParser->sampleLight(pos);
     if (lightSample.pdf <= 0.0f || lightSample.dist <= 0.0f) {
         return Vector3f::ZERO;
@@ -153,7 +201,14 @@ Vector3f estimateGlossyDirectLight(const Vector3f &pos,
         return Vector3f::ZERO;
     }
 
-    Vector3f f_r = evaluateGlossyBRDF(material->getSpecularColor(), R, lightSample.dir, exponent);
+    Vector3f f_r = evaluateCookTorranceGGX(
+        normal,
+        (-rayDir).normalized(),
+        lightSample.dir.normalized(),
+        material->getSpecularColor(),
+        material->getRoughness()
+    );
+
     return lightSample.col * f_r * cosThetaX * cosThetaY /
            (lightSample.pdf * lightSample.dist * lightSample.dist);
 }
@@ -192,19 +247,25 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
             return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
         }
 
-        float exponent = glossyExponentFromRoughness(material->getRoughness());
-        Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, R, material, exponent);
+        Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, ray.getDirection(), material);
         if (Random::get_float() > P_RR) {
             return emission + direct;
         }
 
-        GlossySample sample = sampleGlossyDirection(R, material->getRoughness());
+        Vector3f V = (-ray.getDirection()).normalized();
+        GlossySample sample = sampleGGXDirection(shadingNormal, V, material->getRoughness());
         float cosTheta = Vector3f::dot(sample.dir, shadingNormal);
         if (cosTheta <= 0.0f || sample.pdf <= 0.0f) {
             return emission + direct;
         }
-        Vector3f glossyBRDF = evaluateGlossyBRDF(material->getSpecularColor(), R, sample.dir, sample.exponent);
         Vector3f wi = sample.dir;
+        Vector3f glossyBRDF = evaluateCookTorranceGGX(
+            shadingNormal,
+            V,
+            wi.normalized(),
+            material->getSpecularColor(),
+            material->getRoughness()
+        );
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
         return emission + direct + tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
