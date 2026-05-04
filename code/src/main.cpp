@@ -10,7 +10,6 @@
 #include "image.hpp"
 #include "camera.hpp"
 #include "group.hpp"
-#include "light.hpp"
 #include "random.hpp"
 
 #include <cmath>
@@ -178,51 +177,13 @@ GlossySample sampleGGXDirection(const Vector3f &N,
     return {wi.normalized(), pdfWi};
 }
 
-Vector3f estimateGlossyDirectLight(const Vector3f &pos,
-                                   const Vector3f &normal,
-                                   const Vector3f &rayDir,
-                                   Material *material) {
-    Light::SampleResult lightSample = sceneParser->sampleLight(pos);
-    if (lightSample.pdf <= 0.0f || lightSample.dist <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    float cosThetaX = std::max(0.0f, Vector3f::dot(normal, lightSample.dir));
-    float cosThetaY = std::max(0.0f, Vector3f::dot(lightSample.normal, -lightSample.dir));
-    if (cosThetaX <= 0.0f || cosThetaY <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f shadowOrigin = pos + normal * 1e-6;
-    Ray shadowRay(shadowOrigin, lightSample.dir);
-    Hit shadowHit;
-    sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-    if (shadowHit.getT() <= lightSample.dist - 1e-4) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f f_r = evaluateCookTorranceGGX(
-        normal,
-        (-rayDir).normalized(),
-        lightSample.dir.normalized(),
-        material->getSpecularColor(),
-        material->getRoughness()
-    );
-
-    return lightSample.col * f_r * cosThetaX * cosThetaY /
-           (lightSample.pdf * lightSample.dist * lightSample.dist);
-}
-
-Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
+Vector3f tracePath(Ray ray, int depth) {
     Hit hit;
     if (!sceneParser->getGroup()->intersect(ray, hit, 0)) {
         return sceneParser->getBackgroundColor();
     }
     Material *material = hit.getMaterial();
-    Vector3f emission = Vector3f::ZERO;
-    if (depth == 0 || fromSpecular) {
-        emission = material->getEmission();
-    }
+    Vector3f emission = material->getEmission();
 
     if (depth >= MAX_DEPTH) {
         return emission;
@@ -244,19 +205,18 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
             }
             Vector3f offsetNormal = Vector3f::dot(R, normal) > 0 ? normal : -normal;
             Ray nextRay(pos + offsetNormal * 1e-6, R);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+            return emission + tracePath(nextRay, depth + 1) * material->getSpecularColor() / P_RR;
         }
 
-        Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, ray.getDirection(), material);
         if (Random::get_float() > P_RR) {
-            return emission + direct;
+            return emission;
         }
 
         Vector3f V = (-ray.getDirection()).normalized();
         GlossySample sample = sampleGGXDirection(shadingNormal, V, material->getRoughness());
         float cosTheta = Vector3f::dot(sample.dir, shadingNormal);
         if (cosTheta <= 0.0f || sample.pdf <= 0.0f) {
-            return emission + direct;
+            return emission;
         }
         Vector3f wi = sample.dir;
         Vector3f glossyBRDF = evaluateCookTorranceGGX(
@@ -268,7 +228,7 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         );
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
-        return emission + direct + tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+        return emission + tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
     }
 
     if (material->isGlass()) {
@@ -287,31 +247,16 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         if (Random::get_float() < kr) {
             Vector3f offsetNormal = Vector3f::dot(reflected, normal) > 0 ? normal : -normal;
             Ray nextRay(pos + offsetNormal * 1e-6, reflected);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+            return emission + tracePath(nextRay, depth + 1) * material->getSpecularColor() / P_RR;
         } else {
             Vector3f offsetNormal = Vector3f::dot(refracted, normal) > 0 ? normal : -normal;
             Ray nextRay(pos + offsetNormal * 1e-6, refracted);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getTransmissionColor() / P_RR;
+            return emission + tracePath(nextRay, depth + 1) * material->getTransmissionColor() / P_RR;
         }
     }
-    
-    Light::SampleResult sample = sceneParser->sampleLight(pos);
-    Vector3f direct = Vector3f::ZERO;
-    if (sample.pdf > 0.0f && sample.dist > 0.0f) {
-        Vector3f shadowOrigin = pos + normal * 1e-6;
-        Ray shadowRay(shadowOrigin, sample.dir);
-        Hit shadowHit;
-        sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-        if (shadowHit.getT() > sample.dist - 1e-4) {
-            float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
-            float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-            Vector3f f_r = material->getDiffuseColor() / M_PI;
-            direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
-        }
-    }
-    
+
     if (Random::get_float() > P_RR) {
-        return emission + direct;
+        return emission;
     }
 
     Vector3f T, B;
@@ -329,7 +274,7 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
                    normal * std::sqrt(1 - r2)).normalized();
     Ray nextRay(pos + normal * 1e-6, wi);
     Vector3f indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
-    Vector3f result = emission + direct + indirect;
+    Vector3f result = emission + indirect;
     if (std::isnan(result.x()) || std::isinf(result.x())) {
         std::cout << "nan or inf" << std::endl;
         return Vector3f::ZERO;
