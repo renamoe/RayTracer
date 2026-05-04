@@ -22,14 +22,14 @@
 
 constexpr float P_RR = 0.8f;
 constexpr int NUM_SAMPLES = 32;
-constexpr float EXPOSURE = 2.0f;
+constexpr float DEFAULT_EXPOSURE = 1.5f;
 constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
 constexpr int MAX_DEPTH = 8;
 
 SceneParser *sceneParser;
 
-Vector3f toneMap(Vector3f color) {
-    color = color * EXPOSURE;
+Vector3f toneMap(Vector3f color, float exposure) {
+    color = color * exposure;
     color = Vector3f(
         1.0f - std::exp(-std::max(0.0f, color.x())),
         1.0f - std::exp(-std::max(0.0f, color.y())),
@@ -342,18 +342,24 @@ int main(int argc, char *argv[]) {
         std::cout << "Argument " << argNum << " is: " << argv[argNum] << std::endl;
     }
 
-    if (argc != 3 && argc != 4) {
-        std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> [num_samples]" << std::endl;
+    if (argc < 3 || argc > 5) {
+        std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> [num_samples] [exposure]" << std::endl;
         return 1;
     }
     std::string inputFile = argv[1];
     std::string outputFile = argv[2];  // only bmp is allowed.
-    int numSamples = argc == 4 ? std::atoi(argv[3]) : NUM_SAMPLES;
+    int numSamples = argc >= 4 ? std::atoi(argv[3]) : NUM_SAMPLES;
     if (numSamples <= 0) {
         std::cout << "num samples must be a positive integer" << std::endl;
         return 1;
     }
+    float exposure = argc >= 5 ? std::atof(argv[4]) : DEFAULT_EXPOSURE;
+    if (!std::isfinite(exposure) || exposure <= 0.0f) {
+        std::cout << "exposure must be a positive number" << std::endl;
+        return 1;
+    }
     std::cout << "num samples per pixel: " << numSamples << std::endl;
+    std::cout << "exposure: " << exposure << std::endl;
 
     std::cout << "Hello! Computer Graphics!" << std::endl;
 
@@ -376,7 +382,7 @@ int main(int argc, char *argv[]) {
                 color += tracePath(ray, 0);
             }
             color = color / (float)numSamples;
-            color = toneMap(color);
+            color = toneMap(color, exposure);
             image.SetPixel(x, y, color);
         }
     }
