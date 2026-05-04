@@ -42,15 +42,14 @@ Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
         return Vector3f::ZERO;
     }
 
+    Vector3f V = (-rayDir).normalized();
     Vector3f f_r = evaluateCookTorranceGGX(
         normal,
-        (-rayDir).normalized(),
+        V,
         lightSample.dir.normalized(),
         material->getSpecularColor(),
         material->getRoughness()
     );
-
-    Vector3f V = (-rayDir).normalized();
 
     float pdfLight = areaPdfToSolidAnglePdf(lightSample.pdf, lightSample.dist, cosThetaY);
     float pdfBrdf = ggxPdf(normal, V, lightSample.dir.normalized(), material->getRoughness());
