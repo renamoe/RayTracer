@@ -8,6 +8,7 @@ ENDIF()
 ADD_SUBDIRECTORY(deps/vecmath)
 
 SET(RayTracer_SOURCES
+        src/bsdf.cpp
         src/camera.cpp
         src/group.cpp
         src/hit.cpp
@@ -16,14 +17,20 @@ SET(RayTracer_SOURCES
         src/material.cpp
         src/main.cpp
         src/mesh.cpp
+        src/path_tracer.cpp
         src/plane.cpp
+        src/progress.cpp
         src/ray.cpp
+        src/render_config.cpp
+        src/renderer.cpp
         src/scene_parser.cpp
         src/sphere.cpp
+        src/tone_mapping.cpp
         src/transform.cpp
         src/triangle.cpp)
 
 SET(RayTracer_INCLUDES
+        include/bsdf.hpp
         include/camera.hpp
         include/group.hpp
         include/hit.hpp
@@ -32,10 +39,15 @@ SET(RayTracer_INCLUDES
         include/material.hpp
         include/mesh.hpp
         include/object3d.hpp
+        include/path_tracer.hpp
         include/plane.hpp
+        include/progress.hpp
         include/ray.hpp
+        include/render_config.hpp
+        include/renderer.hpp
         include/scene_parser.hpp
         include/sphere.hpp
+        include/tone_mapping.hpp
         include/transform.hpp
         include/triangle.hpp
         include/random.hpp
