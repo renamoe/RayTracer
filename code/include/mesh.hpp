@@ -45,10 +45,18 @@ public:
     float getArea() const override;
 
 private:
+    struct TriangleData {
+        Vector3f v0;
+        Vector3f e1;
+        Vector3f e2;
+        Vector3f normal;
+        Vector3f centroid;
+        AABB box;
+        Material *material = nullptr;
+        float area = 0.0f;
+    };
 
-    // Normal can be used for light estimation
-    void computeNormal();
-    void computeBoxesAndCentroids();
+    void computeTriangleData();
 
     BVHNode* buildBVH(int start, int end);
     bool intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) const;
@@ -61,8 +69,7 @@ public:
     std::vector<Material*> mtl_materials;
 private:
     std::vector<int> triIds;
-    std::vector<AABB> triBoxes;
-    std::vector<Vector3f> triCentroids;
+    std::vector<TriangleData> triangleData;
     BVHNode* bvhRoot = nullptr;
 };
 

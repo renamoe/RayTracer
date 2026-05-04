@@ -140,8 +140,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
         }
     }
 
-    computeNormal();
-    computeBoxesAndCentroids();
+    computeTriangleData();
     triIds.resize(tris.size());
     std::iota(triIds.begin(), triIds.end(), 0);
     if (!tris.empty()) {
@@ -159,36 +158,35 @@ Mesh::~Mesh() {
     }
 }
 
-void Mesh::computeNormal() {
+void Mesh::computeTriangleData() {
     normals.resize(tris.size());
+    triangleData.resize(tris.size());
     for (int triId = 0; triId < (int) tris.size(); ++triId) {
-        TriangleIndex& triIndex = tris[triId];
-        Vector3f a = verts[triIndex[1]] - verts[triIndex[0]];
-        Vector3f b = verts[triIndex[2]] - verts[triIndex[0]];
-        b = Vector3f::cross(a, b);
-        normals[triId] = b / b.length();
+        const TriangleIndex& triIndex = tris[triId];
+        TriangleData &data = triangleData[triId];
+
+        data.v0 = verts[triIndex[0]];
+        data.e1 = verts[triIndex[1]] - data.v0;
+        data.e2 = verts[triIndex[2]] - data.v0;
+
+        Vector3f normal = Vector3f::cross(data.e1, data.e2);
+        float normalLength = normal.length();
+        data.normal = normalLength > 0.0f ? normal / normalLength : Vector3f::ZERO;
+        data.area = 0.5f * normalLength;
+        data.centroid = (data.v0 + verts[triIndex[1]] + verts[triIndex[2]]) / 3.0f;
+        data.box = AABB(data.v0, verts[triIndex[1]], verts[triIndex[2]]);
+        data.material = getTriangleMaterial(triId);
+
+        normals[triId] = data.normal;
     }
 }
 
 float Mesh::getArea() const {
     float area = 0;
-    for (int triId = 0; triId < (int) tris.size(); ++triId) {
-        const TriangleIndex& triIndex = tris[triId];
-        Vector3f a = verts[triIndex[1]] - verts[triIndex[0]];
-        Vector3f b = verts[triIndex[2]] - verts[triIndex[0]];
-        area += 0.5 * Vector3f::cross(a, b).length();
+    for (const TriangleData &data : triangleData) {
+        area += data.area;
     }
     return area;
-}
-
-void Mesh::computeBoxesAndCentroids() {
-    int n = tris.size();
-    triBoxes.resize(n);
-    triCentroids.resize(n);
-    for (int triId = 0; triId < n; ++triId) {
-        triBoxes[triId] = AABB(verts[tris[triId][0]], verts[tris[triId][1]], verts[tris[triId][2]]);
-        triCentroids[triId] = (verts[tris[triId][0]] + verts[tris[triId][1]] + verts[tris[triId][2]]) / 3.0f;
-    }
 }
 
 BVHNode* Mesh::buildBVH(int start, int end) {
@@ -199,12 +197,12 @@ BVHNode* Mesh::buildBVH(int start, int end) {
     BVHNode* node = new BVHNode();
 
     int firstTriId = triIds[start];
-    node->box = triBoxes[firstTriId];
-    AABB centroidBounds = AABB(triCentroids[firstTriId]);
+    node->box = triangleData[firstTriId].box;
+    AABB centroidBounds = AABB(triangleData[firstTriId].centroid);
     for (int i = start; i < end; ++i) {
         int triId = triIds[i];
-        node->box.expand(triBoxes[triId]);
-        centroidBounds.expand(AABB(triCentroids[triId]));
+        node->box.expand(triangleData[triId].box);
+        centroidBounds.expand(triangleData[triId].centroid);
     }
 
     int count = end - start;
@@ -221,7 +219,7 @@ BVHNode* Mesh::buildBVH(int start, int end) {
         triIds.begin() + mid,
         triIds.begin() + end,
         [&](int a, int b) {
-            return triCentroids[a][axis] < triCentroids[b][axis];
+            return triangleData[a].centroid[axis] < triangleData[b].centroid[axis];
         }
     );
     node->left = buildBVH(start, mid);
@@ -230,56 +228,54 @@ BVHNode* Mesh::buildBVH(int start, int end) {
 }
 
 bool Mesh::intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) const {
-    Vector3f E1 = verts[tris[triId][1]] - verts[tris[triId][0]];
-    Vector3f E2 = verts[tris[triId][2]] - verts[tris[triId][0]];
+    const TriangleData &data = triangleData[triId];
     Vector3f O = ray.getOrigin();
     Vector3f D = ray.getDirection();
-    Vector3f DE2 = Vector3f::cross(D, E2);
-    float det = Vector3f::dot(E1, DE2);
+    Vector3f DE2 = Vector3f::cross(D, data.e2);
+    float det = Vector3f::dot(data.e1, DE2);
     if (std::abs(det) < 1e-6) {
         return false;
     }
     float inv = 1.0f / det;
-    Vector3f S = O - verts[tris[triId][0]];
+    Vector3f S = O - data.v0;
     float u = inv * Vector3f::dot(S, DE2);
     if (u < 0 || u > 1.0f) {
         return false;
     }
-    Vector3f SE1 = Vector3f::cross(S, E1);
+    Vector3f SE1 = Vector3f::cross(S, data.e1);
     float v = inv * Vector3f::dot(D, SE1);
     if (v < 0 || u + v > 1.0f) {
         return false;
     }
-    float t = inv * Vector3f::dot(E2, SE1);
+    float t = inv * Vector3f::dot(data.e2, SE1);
     if (t < tmin || t > hit.getT()) {
         return false;
     }
-    hit.set(t, getTriangleMaterial(triId), normals[triId]);
+    hit.set(t, data.material, data.normal);
     return true;
 }
 
 bool Mesh::occludedTriangle(int triId, const Ray& ray, float tmin, float tmax) const {
-    Vector3f E1 = verts[tris[triId][1]] - verts[tris[triId][0]];
-    Vector3f E2 = verts[tris[triId][2]] - verts[tris[triId][0]];
+    const TriangleData &data = triangleData[triId];
     Vector3f O = ray.getOrigin();
     Vector3f D = ray.getDirection();
-    Vector3f DE2 = Vector3f::cross(D, E2);
-    float det = Vector3f::dot(E1, DE2);
+    Vector3f DE2 = Vector3f::cross(D, data.e2);
+    float det = Vector3f::dot(data.e1, DE2);
     if (std::abs(det) < 1e-6) {
         return false;
     }
     float inv = 1.0f / det;
-    Vector3f S = O - verts[tris[triId][0]];
+    Vector3f S = O - data.v0;
     float u = inv * Vector3f::dot(S, DE2);
     if (u < 0 || u > 1.0f) {
         return false;
     }
-    Vector3f SE1 = Vector3f::cross(S, E1);
+    Vector3f SE1 = Vector3f::cross(S, data.e1);
     float v = inv * Vector3f::dot(D, SE1);
     if (v < 0 || u + v > 1.0f) {
         return false;
     }
-    float t = inv * Vector3f::dot(E2, SE1);
+    float t = inv * Vector3f::dot(data.e2, SE1);
     return t >= tmin && t <= tmax;
 }
 
