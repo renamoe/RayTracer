@@ -2,63 +2,25 @@
 #include "triangle.hpp"
 #include <iostream>
 #include <algorithm>
+#include <array>
 #include <numeric>
 
-float minOnDim(const Vector3f &a, const Vector3f &b, const Vector3f &c, int dim) {
-    return std::min(a[dim], std::min(b[dim], c[dim]));
-}
-float maxOnDim(const Vector3f &a, const Vector3f &b, const Vector3f &c, int dim) {
-    return std::max(a[dim], std::max(b[dim], c[dim]));
-}
+namespace {
 
-AABB::AABB(const Vector3f &a, const Vector3f &b, const Vector3f &c) {
-    min = Vector3f(minOnDim(a, b, c, 0), minOnDim(a, b, c, 1), minOnDim(a, b, c, 2));
-    max = Vector3f(maxOnDim(a, b, c, 0), maxOnDim(a, b, c, 1), maxOnDim(a, b, c, 2));
-}
+constexpr int BVH_STACK_SIZE = 128;
 
-void AABB::expand(const AABB &other) {
-    min = Vector3f(std::min(min.x(), other.min.x()), std::min(min.y(), other.min.y()), std::min(min.z(), other.min.z()));
-    max = Vector3f(std::max(max.x(), other.max.x()), std::max(max.y(), other.max.y()), std::max(max.z(), other.max.z()));
-}
-
-int AABB::longestAxis() const {
-    Vector3f diag = max - min;
-    if (diag.x() > diag.y() && diag.x() > diag.z()) {
-        return 0;
-    } else if (diag.y() > diag.z()) {
-        return 1;
-    } else {
-        return 2;
-    }
-}
-
-bool AABB::intersect(const Ray &ray, float tmin, float tmax) const {
-    for (int dim = 0; dim < 3; ++dim) {
-        float invD = 1.0f / ray.getDirection()[dim];
-        float t0 = (min[dim] - ray.getOrigin()[dim]) * invD;
-        float t1 = (max[dim] - ray.getOrigin()[dim]) * invD;
-        if (invD < 0.0f) {
-            std::swap(t0, t1);
-        }
-        tmin = std::max(tmin, t0);
-        tmax = std::min(tmax, t1);
-        if (tmax <= tmin) {
-            return false;
-        }
-    }
-    return true;
-}
+} // namespace
 
 bool Mesh::intersect(const Ray &r, Hit &h, float tmin) {
     if (!bvhRoot) return false;
 
     bool result = false;
-    std::vector<BVHNode*> stack;
-    stack.push_back(bvhRoot);
+    std::array<BVHNode*, BVH_STACK_SIZE> stack;
+    int stackSize = 0;
+    stack[stackSize++] = bvhRoot;
 
-    while (!stack.empty()) {
-        BVHNode* node = stack.back();
-        stack.pop_back();
+    while (stackSize > 0) {
+        BVHNode* node = stack[--stackSize];
         if (!node->box.intersect(r, tmin, h.getT())) {
             continue;
         }
@@ -69,10 +31,10 @@ bool Mesh::intersect(const Ray &r, Hit &h, float tmin) {
             }
         } else {
             if (node->left != nullptr) {
-                stack.push_back(node->left);
+                stack[stackSize++] = node->left;
             }
             if (node->right != nullptr) {
-                stack.push_back(node->right);
+                stack[stackSize++] = node->right;
             }
         }
     }
@@ -82,12 +44,12 @@ bool Mesh::intersect(const Ray &r, Hit &h, float tmin) {
 bool Mesh::occluded(const Ray &r, float tmin, float tmax) {
     if (!bvhRoot || tmax < tmin) return false;
 
-    std::vector<BVHNode*> stack;
-    stack.push_back(bvhRoot);
+    std::array<BVHNode*, BVH_STACK_SIZE> stack;
+    int stackSize = 0;
+    stack[stackSize++] = bvhRoot;
 
-    while (!stack.empty()) {
-        BVHNode* node = stack.back();
-        stack.pop_back();
+    while (stackSize > 0) {
+        BVHNode* node = stack[--stackSize];
         if (!node->box.intersect(r, tmin, tmax)) {
             continue;
         }
@@ -100,14 +62,22 @@ bool Mesh::occluded(const Ray &r, float tmin, float tmax) {
             }
         } else {
             if (node->left != nullptr) {
-                stack.push_back(node->left);
+                stack[stackSize++] = node->left;
             }
             if (node->right != nullptr) {
-                stack.push_back(node->right);
+                stack[stackSize++] = node->right;
             }
         }
     }
     return false;
+}
+
+bool Mesh::getBoundingBox(AABB &box) const {
+    if (bvhRoot == nullptr) {
+        return false;
+    }
+    box = bvhRoot->box;
+    return true;
 }
 
 #define TINYOBJLOADER_IMPLEMENTATION

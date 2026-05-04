@@ -14,6 +14,7 @@ public:
 	Triangle(const Vector3f& a, const Vector3f& b, const Vector3f& c, Material* m);
 
 	bool intersect(const Ray& ray,  Hit& hit , float tmin) override;
+    bool getBoundingBox(AABB &box) const override;
 
     float getArea() const override;
 

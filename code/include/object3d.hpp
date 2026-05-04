@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vector3f.h"
+#include "aabb.hpp"
 #include "ray.hpp"
 #include "hit.hpp"
 #include "material.hpp"
@@ -32,6 +33,10 @@ public:
     virtual bool occluded(const Ray &r, float tmin, float tmax) {
         Hit h(tmax, nullptr, Vector3f::ZERO);
         return intersect(r, h, tmin);
+    }
+
+    virtual bool getBoundingBox(AABB &box) const {
+        return false;
     }
 protected:
 

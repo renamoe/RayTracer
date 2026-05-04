@@ -19,6 +19,7 @@ public:
 
     virtual bool intersect(const Ray &r, Hit &h, float tmin) override;
     bool occluded(const Ray &r, float tmin, float tmax) override;
+    bool getBoundingBox(AABB &box) const override;
 
     float getArea() const override;
 

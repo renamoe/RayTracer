@@ -1,21 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include "object3d.hpp"
 #include "Vector2f.h"
 #include "Vector3f.h"
-
-struct AABB {
-    Vector3f min;
-    Vector3f max;
-
-    AABB() : min(Vector3f::ZERO), max(Vector3f::ZERO) {}
-    AABB(const Vector3f &p) : min(p), max(p) {}
-    AABB(const Vector3f &a, const Vector3f &b, const Vector3f &c);
-    void expand(const AABB &other);
-    int longestAxis() const;
-    bool intersect(const Ray &ray, float tmin, float tmax) const;
-};
 
 struct BVHNode {
     AABB box;
@@ -50,6 +39,7 @@ public:
     };
     bool intersect(const Ray &r, Hit &h, float tmin) override;
     bool occluded(const Ray &r, float tmin, float tmax) override;
+    bool getBoundingBox(AABB &box) const override;
     Material *getTriangleMaterial(int triId) const;
 
     float getArea() const override;

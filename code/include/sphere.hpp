@@ -13,6 +13,7 @@ public:
     ~Sphere() override = default;
 
     bool intersect(const Ray &r, Hit &h, float tmin) override;
+    bool getBoundingBox(AABB &box) const override;
 
     float getArea() const override;
 

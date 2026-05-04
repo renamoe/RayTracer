@@ -17,12 +17,15 @@ public:
 
     const Vector3f &getDirection() const;
 
+    const Vector3f &getInverseDirection() const;
+
     Vector3f pointAtParameter(float t) const;
 
 private:
 
     Vector3f origin;
     Vector3f direction;
+    Vector3f inverseDirection;
 
 };
 

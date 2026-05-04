@@ -8,6 +8,7 @@ ENDIF()
 ADD_SUBDIRECTORY(deps/vecmath)
 
 SET(RayTracer_SOURCES
+        src/aabb.cpp
         src/bsdf.cpp
         src/camera.cpp
         src/group.cpp
@@ -30,6 +31,7 @@ SET(RayTracer_SOURCES
         src/triangle.cpp)
 
 SET(RayTracer_INCLUDES
+        include/aabb.hpp
         include/bsdf.hpp
         include/camera.hpp
         include/group.hpp

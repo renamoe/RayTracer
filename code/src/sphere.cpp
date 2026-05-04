@@ -29,6 +29,13 @@ bool Sphere::intersect(const Ray &r, Hit &h, float tmin) {
     return true;
 }
 
+bool Sphere::getBoundingBox(AABB &box) const {
+    Vector3f r(radius, radius, radius);
+    box = AABB(center - r);
+    box.expand(center + r);
+    return true;
+}
+
 float Sphere::getArea() const {
     return 4 * M_PI * radius * radius;
 }

@@ -38,6 +38,11 @@ bool Triangle::intersect(const Ray& ray,  Hit& hit , float tmin) {
     return true;
 }
 
+bool Triangle::getBoundingBox(AABB &box) const {
+    box = AABB(vertices[0], vertices[1], vertices[2]);
+    return true;
+}
+
 float Triangle::getArea() const {
     return 0.5 * Vector3f::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]).length();
 }

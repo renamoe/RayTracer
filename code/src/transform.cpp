@@ -44,6 +44,31 @@ bool Transform::occluded(const Ray &r, float tmin, float tmax) {
     return o->occluded(tr, tmin * directionLength, tmax * directionLength);
 }
 
+bool Transform::getBoundingBox(AABB &box) const {
+    AABB childBox;
+    if (o == nullptr || !o->getBoundingBox(childBox)) {
+        return false;
+    }
+
+    Matrix4f world = transform.inverse();
+    Vector3f corners[8] = {
+        Vector3f(childBox.min.x(), childBox.min.y(), childBox.min.z()),
+        Vector3f(childBox.max.x(), childBox.min.y(), childBox.min.z()),
+        Vector3f(childBox.min.x(), childBox.max.y(), childBox.min.z()),
+        Vector3f(childBox.min.x(), childBox.min.y(), childBox.max.z()),
+        Vector3f(childBox.max.x(), childBox.max.y(), childBox.min.z()),
+        Vector3f(childBox.max.x(), childBox.min.y(), childBox.max.z()),
+        Vector3f(childBox.min.x(), childBox.max.y(), childBox.max.z()),
+        Vector3f(childBox.max.x(), childBox.max.y(), childBox.max.z())
+    };
+
+    box = AABB(transformPoint(world, corners[0]));
+    for (int i = 1; i < 8; ++i) {
+        box.expand(transformPoint(world, corners[i]));
+    }
+    return true;
+}
+
 float Transform::getArea() const {
     // temporarily assess
     float s = o->getArea();
