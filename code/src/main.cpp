@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -11,7 +12,6 @@
 #include "camera.hpp"
 #include "group.hpp"
 #include "light.hpp"
-#include "random.hpp"
 
 #include <cmath>
 #include <string>
@@ -20,11 +20,10 @@
 #include <omp.h>
 #endif
 
-constexpr float P_RR = 0.8f;
-constexpr int NUM_SAMPLES = 32;
-constexpr float EXPOSURE = 2.0f;
-constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
+constexpr int NUM_SAMPLES = 1;
+constexpr float EXPOSURE = 1.0f;
 constexpr int MAX_DEPTH = 8;
+constexpr float RAY_EPS = 1e-5f;
 
 SceneParser *sceneParser;
 
@@ -81,260 +80,97 @@ float fresnelSchlick(const Vector3f &I, const Vector3f &N, float etaI, float eta
     return r0 + (1.0f - r0) * std::pow(1.0f - std::abs(cosTheta), 5.0f);
 }
 
-struct GlossySample {
-    Vector3f dir;
-    float pdf;
-};
-
-float clamp01(float x) {
-    return std::max(0.0f, std::min(1.0f, x));
+Vector3f offsetRayOrigin(const Vector3f &pos, const Vector3f &normal, const Vector3f &dir) {
+    Vector3f offsetNormal = Vector3f::dot(dir, normal) > 0.0f ? normal : -normal;
+    return pos + offsetNormal * RAY_EPS;
 }
 
-Vector3f fresnelSchlickColor(float cosTheta, const Vector3f &F0) {
-    float f = std::pow(1.0f - clamp01(cosTheta), 5.0f);
-    return F0 + (Vector3f(1, 1, 1) - F0) * f;
-}
-
-float distributionGGX(const Vector3f &N, const Vector3f &H, float roughness) {
-    float alpha = std::max(0.001f, roughness * roughness);
-    float a2 = alpha * alpha;
-    float NoH = clamp01(Vector3f::dot(N, H));
-    float NoH2 = NoH * NoH;
-
-    float denom = NoH2 * (a2 - 1.0f) + 1.0f;
-    return a2 / (M_PI * denom * denom);
-}
-
-float geometrySmithGGX(const Vector3f &N, const Vector3f &V, const Vector3f &L, float roughness) {
-    float alpha = std::max(0.001f, roughness * roughness);
-    float a2 = alpha * alpha;
-
-    auto G1 = [a2](float NoX) {
-        NoX = std::max(0.0f, NoX);
-        return 2.0f * NoX / (NoX + std::sqrt(a2 + (1.0f - a2) * NoX * NoX));
-    };
-
-    return G1(Vector3f::dot(N, V)) * G1(Vector3f::dot(N, L));
-}
-
-Vector3f evaluateCookTorranceGGX(const Vector3f &N,
-                                 const Vector3f &V,
-                                 const Vector3f &L,
-                                 const Vector3f &F0,
-                                 float roughness) {
-    float NoV = clamp01(Vector3f::dot(N, V));
-    float NoL = clamp01(Vector3f::dot(N, L));
-    if (NoV <= 0.0f || NoL <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f H = (V + L).normalized();
-    float VoH = clamp01(Vector3f::dot(V, H));
-
-    float D = distributionGGX(N, H, roughness);
-    float G = geometrySmithGGX(N, V, L, roughness);
-    Vector3f F = fresnelSchlickColor(VoH, F0);
-
-    return F * (D * G / std::max(4.0f * NoV * NoL, 1e-6f));
-}
-
-GlossySample sampleGGXDirection(const Vector3f &N,
-                                const Vector3f &V,
-                                float roughness) {
-    Vector3f T;
-    if (std::abs(N.x()) > 0.9f) {
-        T = Vector3f::cross(Vector3f(0, 1, 0), N).normalized();
-    } else {
-        T = Vector3f::cross(Vector3f(1, 0, 0), N).normalized();
-    }
-    Vector3f B = Vector3f::cross(N, T).normalized();
-
-    float u1 = Random::get_float();
-    float u2 = Random::get_float();
-    float alpha = std::max(0.001f, roughness * roughness);
-    float a2 = alpha * alpha;
-
-    float phi = 2.0f * M_PI * u1;
-    float cosTheta = std::sqrt((1.0f - u2) / std::max(1.0f + (a2 - 1.0f) * u2, 1e-6f));
-    float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
-
-    Vector3f H = (T * std::cos(phi) * sinTheta +
-                  B * std::sin(phi) * sinTheta +
-                  N * cosTheta).normalized();
-    if (Vector3f::dot(V, H) <= 0.0f) {
-        H = -H;
-    }
-
-    Vector3f wi = reflect(-V, H);
-    float NoL = clamp01(Vector3f::dot(N, wi));
-    float NoH = clamp01(Vector3f::dot(N, H));
-    float VoH = clamp01(Vector3f::dot(V, H));
-    if (NoL <= 0.0f || NoH <= 0.0f || VoH <= 0.0f) {
-        return {Vector3f::ZERO, 0.0f};
-    }
-
-    float pdfH = distributionGGX(N, H, roughness) * NoH;
-    float pdfWi = pdfH / std::max(4.0f * VoH, 1e-6f);
-    return {wi.normalized(), pdfWi};
-}
-
-Vector3f estimateGlossyDirectLight(const Vector3f &pos,
-                                   const Vector3f &normal,
-                                   const Vector3f &rayDir,
-                                   Material *material) {
-    Light::SampleResult lightSample = sceneParser->sampleLight(pos);
-    if (lightSample.pdf <= 0.0f || lightSample.dist <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    float cosThetaX = std::max(0.0f, Vector3f::dot(normal, lightSample.dir));
-    float cosThetaY = std::max(0.0f, Vector3f::dot(lightSample.normal, -lightSample.dir));
-    if (cosThetaX <= 0.0f || cosThetaY <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f shadowOrigin = pos + normal * 1e-6;
-    Ray shadowRay(shadowOrigin, lightSample.dir);
+bool isOccluded(const Vector3f &pos, const Vector3f &normal, const Vector3f &dir, float maxDist) {
+    Ray shadowRay(offsetRayOrigin(pos, normal, dir), dir);
     Hit shadowHit;
-    sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-    if (shadowHit.getT() <= lightSample.dist - 1e-4) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f f_r = evaluateCookTorranceGGX(
-        normal,
-        (-rayDir).normalized(),
-        lightSample.dir.normalized(),
-        material->getSpecularColor(),
-        material->getRoughness()
-    );
-
-    return lightSample.col * f_r * cosThetaX * cosThetaY /
-           (lightSample.pdf * lightSample.dist * lightSample.dist);
+    sceneParser->getGroup()->intersect(shadowRay, shadowHit, RAY_EPS);
+    return shadowHit.getT() < maxDist - RAY_EPS;
 }
 
-Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
+Vector3f phongDirectLighting(const Ray &ray, const Hit &hit, const Vector3f &pos) {
+    Vector3f result = Vector3f::ZERO;
+    Material *material = hit.getMaterial();
+    Vector3f normal = hit.getNormal();
+
+    for (int i = 0; i < sceneParser->getNumLights(); ++i) {
+        Light *light = sceneParser->getLight(i);
+        Vector3f dirToLight;
+        Vector3f lightColor;
+        float maxDist = 1e38f;
+
+        if (auto *pointLight = dynamic_cast<PointLight *>(light)) {
+            Vector3f lightVec = pointLight->getPosition() - pos;
+            float dist2 = lightVec.squaredLength();
+            if (dist2 <= RAY_EPS * RAY_EPS) {
+                continue;
+            }
+            float dist = std::sqrt(dist2);
+            dirToLight = lightVec / dist;
+            lightColor = pointLight->getColor() / dist2;
+            maxDist = dist;
+        } else if (auto *directionalLight = dynamic_cast<DirectionalLight *>(light)) {
+            dirToLight = -directionalLight->getDirection();
+            lightColor = directionalLight->getColor();
+        } else {
+            continue;
+        }
+
+        if (Vector3f::dot(normal, dirToLight) <= 0.0f) {
+            continue;
+        }
+        if (isOccluded(pos, normal, dirToLight, maxDist)) {
+            continue;
+        }
+        result += material->Shade(ray, hit, dirToLight, lightColor);
+    }
+
+    return result;
+}
+
+Vector3f traceWhitted(Ray ray, int depth) {
     Hit hit;
     if (!sceneParser->getGroup()->intersect(ray, hit, 0)) {
         return sceneParser->getBackgroundColor();
     }
     Material *material = hit.getMaterial();
-    Vector3f emission = Vector3f::ZERO;
-    if (depth == 0 || fromSpecular) {
-        emission = material->getEmission();
-    }
-
-    if (depth >= MAX_DEPTH) {
-        return emission;
-    }
-
     Vector3f pos = ray.pointAtParameter(hit.getT());
     Vector3f normal = hit.getNormal();
 
+    if (depth >= MAX_DEPTH) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f color = phongDirectLighting(ray, hit, pos);
+
     if (material->isMirror()) {
-        Vector3f shadingNormal = normal;
-        if (Vector3f::dot(ray.getDirection(), shadingNormal) > 0.0f) {
-            shadingNormal = -shadingNormal;
-        }
-        Vector3f R = reflect(ray.getDirection(), shadingNormal);
-
-        if (material->getRoughness() <= DELTA_MIRROR_ROUGHNESS) {
-            if (Random::get_float() > P_RR) {
-                return emission;
-            }
-            Vector3f offsetNormal = Vector3f::dot(R, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, R);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
-        }
-
-        Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, ray.getDirection(), material);
-        if (Random::get_float() > P_RR) {
-            return emission + direct;
-        }
-
-        Vector3f V = (-ray.getDirection()).normalized();
-        GlossySample sample = sampleGGXDirection(shadingNormal, V, material->getRoughness());
-        float cosTheta = Vector3f::dot(sample.dir, shadingNormal);
-        if (cosTheta <= 0.0f || sample.pdf <= 0.0f) {
-            return emission + direct;
-        }
-        Vector3f wi = sample.dir;
-        Vector3f glossyBRDF = evaluateCookTorranceGGX(
-            shadingNormal,
-            V,
-            wi.normalized(),
-            material->getSpecularColor(),
-            material->getRoughness()
-        );
-        Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
-        Ray nextRay(pos + offsetNormal * 1e-6, wi);
-        return emission + direct + tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+        Vector3f reflected = reflect(ray.getDirection(), normal);
+        Ray reflectedRay(offsetRayOrigin(pos, normal, reflected), reflected);
+        color += traceWhitted(reflectedRay, depth + 1) * material->getSpecularColor();
+        return color;
     }
 
     if (material->isGlass()) {
-        if (Random::get_float() > P_RR) {
-            return emission;
-        }
-        
         Vector3f reflected = reflect(ray.getDirection(), normal);
-
         Vector3f refracted;
         float etaI = 1.0f;
         float etaT = material->getIOR();
         bool canRefract = refract(ray.getDirection(), normal, etaI, etaT, refracted);
         float kr = canRefract ? fresnelSchlick(ray.getDirection(), normal, etaI, etaT) : 1.0f;
-        
-        if (Random::get_float() < kr) {
-            Vector3f offsetNormal = Vector3f::dot(reflected, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, reflected);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
-        } else {
-            Vector3f offsetNormal = Vector3f::dot(refracted, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, refracted);
-            return emission + tracePath(nextRay, depth + 1, true) * material->getTransmissionColor() / P_RR;
+
+        Ray reflectedRay(offsetRayOrigin(pos, normal, reflected), reflected);
+        color += traceWhitted(reflectedRay, depth + 1) * material->getSpecularColor() * kr;
+        if (canRefract) {
+            Ray refractedRay(offsetRayOrigin(pos, normal, refracted), refracted);
+            color += traceWhitted(refractedRay, depth + 1) * material->getTransmissionColor() * (1.0f - kr);
         }
-    }
-    
-    Light::SampleResult sample = sceneParser->sampleLight(pos);
-    Vector3f direct = Vector3f::ZERO;
-    if (sample.pdf > 0.0f && sample.dist > 0.0f) {
-        Vector3f shadowOrigin = pos + normal * 1e-6;
-        Ray shadowRay(shadowOrigin, sample.dir);
-        Hit shadowHit;
-        sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-        if (shadowHit.getT() > sample.dist - 1e-4) {
-            float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
-            float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-            Vector3f f_r = material->getDiffuseColor() / M_PI;
-            direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
-        }
-    }
-    
-    if (Random::get_float() > P_RR) {
-        return emission + direct;
     }
 
-    Vector3f T, B;
-    if (std::abs(normal.x()) > 0.9f) {
-        T = Vector3f::cross(Vector3f(0, 1, 0), normal).normalized();
-    } else {
-        T = Vector3f::cross(Vector3f(1, 0, 0), normal).normalized();
-    }
-    B = Vector3f::cross(normal, T).normalized();
-    float r1 = 2 * M_PI * Random::get_float();
-    float r2 = Random::get_float();
-    float r2s = std::sqrt(r2);
-    Vector3f wi = (T * std::cos(r1) * r2s + 
-                   B * std::sin(r1) * r2s + 
-                   normal * std::sqrt(1 - r2)).normalized();
-    Ray nextRay(pos + normal * 1e-6, wi);
-    Vector3f indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
-    Vector3f result = emission + direct + indirect;
-    if (std::isnan(result.x()) || std::isinf(result.x())) {
-        std::cout << "nan or inf" << std::endl;
-        return Vector3f::ZERO;
-    }
-    return result;
+    return color;
 }
 
 int main(int argc, char *argv[]) {
@@ -365,15 +201,18 @@ int main(int argc, char *argv[]) {
     Image image(width, height);
 
     const auto renderStart = std::chrono::steady_clock::now();
+    int sampleGridSize = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numSamples))));
     #pragma omp parallel for schedule(dynamic, 1)
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
             Vector3f color = Vector3f::ZERO;
             for (int i = 0; i < numSamples; ++i) {
-                float dx = Random::get_float() - 0.5f;
-                float dy = Random::get_float() - 0.5f;
+                int sx = i % sampleGridSize;
+                int sy = i / sampleGridSize;
+                float dx = (sx + 0.5f) / static_cast<float>(sampleGridSize);
+                float dy = (sy + 0.5f) / static_cast<float>(sampleGridSize);
                 Ray ray = sceneParser->getCamera()->generateRay(Vector2f(x + dx, y + dy));
-                color += tracePath(ray, 0);
+                color += traceWhitted(ray, 0);
             }
             color = color / (float)numSamples;
             color = toneMap(color);

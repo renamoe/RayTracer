@@ -47,11 +47,6 @@ SceneParser::SceneParser(const char *filename) {
     fclose(file);
     file = nullptr;
 
-    generateAreaLights(group);
-    for (size_t i = 1; i < aux_sizes.size(); ++i) {
-        aux_sizes[i] += aux_sizes[i - 1];
-    }
-
     if (lights.empty()) {
         printf("WARNING:    No lights specified\n");
     }
