@@ -626,3 +626,28 @@ Light::SampleResult SceneParser::sampleLight(const Vector3f &p) const {
     res.pdf = 1.0 / aux_sizes.back();
     return res;
 }
+
+float SceneParser::lightPdf(const Vector3f &p, const Vector3f &wi) const {
+    if (aux_objects.empty()) {
+        return 0.0f;
+    }
+
+    Ray ray(p, wi);
+    Hit hit;
+    group->intersect(ray, hit, 1e-6f);
+
+    Material *mat = hit.getMaterial();
+    if (mat == nullptr || !mat->isEmissive()) {
+        return 0.0f;
+    }
+
+    float dist = hit.getT();
+    Vector3f lightNormal = hit.getNormal();
+    float cosLight = std::max(0.0f, Vector3f::dot(lightNormal, -wi));
+    if (cosLight <= 0.0f) {
+        return 0.0f;
+    }
+
+    float pdfArea = 1.0f / aux_sizes.back();
+    return pdfArea * dist * dist / cosLight;
+}

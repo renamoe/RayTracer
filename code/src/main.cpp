@@ -95,6 +95,29 @@ Vector3f fresnelSchlickColor(float cosTheta, const Vector3f &F0) {
     return F0 + (Vector3f(1, 1, 1) - F0) * f;
 }
 
+float powerHeuristic(float pdfA, float pdfB) {
+    if (!std::isfinite(pdfA) || !std::isfinite(pdfB) || pdfA <= 0.0f) {
+        return 0.0f;
+    }
+    pdfB = std::max(0.0f, pdfB);
+    float a2 = pdfA * pdfA;
+    float b2 = pdfB * pdfB;
+    float denom = a2 + b2;
+    if (!std::isfinite(denom) || denom <= 1e-8f) {
+        return 0.0f;
+    }
+    return a2 / denom;
+}
+
+bool isFiniteColor(const Vector3f &v) {
+    return std::isfinite(v.x()) && std::isfinite(v.y()) && std::isfinite(v.z());
+}
+
+float diffusePdf(const Vector3f &N, const Vector3f &wi) {
+    float cosTheta = std::max(0.0f, Vector3f::dot(N, wi));
+    return cosTheta / M_PI;
+}
+
 float distributionGGX(const Vector3f &N, const Vector3f &H, float roughness) {
     float alpha = std::max(0.001f, roughness * roughness);
     float a2 = alpha * alpha;
@@ -103,6 +126,39 @@ float distributionGGX(const Vector3f &N, const Vector3f &H, float roughness) {
 
     float denom = NoH2 * (a2 - 1.0f) + 1.0f;
     return a2 / (M_PI * denom * denom);
+}
+
+float ggxPdf(const Vector3f &N,
+             const Vector3f &V,
+             const Vector3f &L,
+             float roughness) {
+    float NoL = clamp01(Vector3f::dot(N, L));
+    if (NoL <= 0.0f) {
+        return 0.0f;
+    }
+
+    Vector3f halfVector = V + L;
+    if (halfVector.squaredLength() <= 1e-12f) {
+        return 0.0f;
+    }
+    Vector3f H = halfVector.normalized();
+    float NoH = clamp01(Vector3f::dot(N, H));
+    float VoH = clamp01(Vector3f::dot(V, H));
+
+    if (NoH <= 0.0f || VoH <= 0.0f) {
+        return 0.0f;
+    }
+
+    float pdfH = distributionGGX(N, H, roughness) * NoH;
+    return pdfH / std::max(4.0f * VoH, 1e-6f);
+}
+
+float areaPdfToSolidAnglePdf(float pdfArea, float dist, float cosLight) {
+    if (!std::isfinite(pdfArea) || !std::isfinite(dist) || !std::isfinite(cosLight) ||
+        pdfArea <= 0.0f || dist <= 0.0f || cosLight <= 0.0f) {
+        return 0.0f;
+    }
+    return pdfArea * dist * dist / cosLight;
 }
 
 float geometrySmithGGX(const Vector3f &N, const Vector3f &V, const Vector3f &L, float roughness) {
@@ -128,7 +184,11 @@ Vector3f evaluateCookTorranceGGX(const Vector3f &N,
         return Vector3f::ZERO;
     }
 
-    Vector3f H = (V + L).normalized();
+    Vector3f halfVector = V + L;
+    if (halfVector.squaredLength() <= 1e-12f) {
+        return Vector3f::ZERO;
+    }
+    Vector3f H = halfVector.normalized();
     float VoH = clamp01(Vector3f::dot(V, H));
 
     float D = distributionGGX(N, H, roughness);
@@ -209,8 +269,16 @@ Vector3f estimateGlossyDirectLight(const Vector3f &pos,
         material->getRoughness()
     );
 
-    return lightSample.col * f_r * cosThetaX * cosThetaY /
-           (lightSample.pdf * lightSample.dist * lightSample.dist);
+    Vector3f V = (-rayDir).normalized();
+
+    float pdfLight = areaPdfToSolidAnglePdf(lightSample.pdf, lightSample.dist, cosThetaY);
+    float pdfBrdf = ggxPdf(normal, V, lightSample.dir.normalized(), material->getRoughness());
+    if (pdfLight <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+    float wLight = powerHeuristic(pdfLight, pdfBrdf);
+
+    return lightSample.col * f_r * cosThetaX / pdfLight * wLight;
 }
 
 Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
@@ -268,7 +336,24 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         );
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
-        return emission + direct + tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+        Hit nextHit;
+        sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
+
+        bool hitLight = nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
+        Vector3f brdfLight = Vector3f::ZERO;
+        if (hitLight) {
+            float pdfLight = sceneParser->lightPdf(pos + offsetNormal * 1e-6, wi);
+            float wBrdf = powerHeuristic(sample.pdf, pdfLight);
+
+            brdfLight = nextHit.getMaterial()->getEmission() * glossyBRDF * cosTheta / std::max(sample.pdf, 1e-6f) * wBrdf / P_RR;
+        }
+
+        Vector3f indirect = Vector3f::ZERO;
+        if (!hitLight) {
+            indirect = tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+        }
+
+        return emission + direct + brdfLight + indirect;
     }
 
     if (material->isGlass()) {
@@ -306,7 +391,12 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
             float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
             Vector3f f_r = material->getDiffuseColor() / M_PI;
-            direct = sample.col * f_r * cosThetaX * cosThetaY / (sample.pdf * sample.dist * sample.dist);
+            float pdfLight = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosThetaY);
+            float pdfBrdf = diffusePdf(normal, sample.dir);
+            if (pdfLight > 0.0f) {
+                float wLight = powerHeuristic(pdfLight, pdfBrdf);
+                direct = sample.col * f_r * cosThetaX / pdfLight * wLight;
+            }
         }
     }
     
@@ -328,9 +418,29 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
                    B * std::sin(r1) * r2s + 
                    normal * std::sqrt(1 - r2)).normalized();
     Ray nextRay(pos + normal * 1e-6, wi);
-    Vector3f indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
-    Vector3f result = emission + direct + indirect;
-    if (std::isnan(result.x()) || std::isinf(result.x())) {
+
+    Hit nextHit;
+    sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
+
+    bool hitLight = nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
+    Vector3f brdfLight = Vector3f::ZERO;
+    if (hitLight) {
+        float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
+        float pdfBrdf = diffusePdf(normal, wi);
+        float pdfLight = sceneParser->lightPdf(pos + normal * 1e-6, wi);
+        float wBrdf = powerHeuristic(pdfBrdf, pdfLight);
+
+        Vector3f f_r = material->getDiffuseColor() / M_PI;
+        brdfLight = nextHit.getMaterial()->getEmission() * f_r * cosTheta / std::max(pdfBrdf, 1e-6f) * wBrdf / P_RR;
+    }
+    
+    Vector3f indirect = Vector3f::ZERO;
+    if (!hitLight) {
+        indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
+    }
+    
+    Vector3f result = emission + direct + brdfLight + indirect;
+    if (!isFiniteColor(result)) {
         std::cout << "nan or inf" << std::endl;
         return Vector3f::ZERO;
     }

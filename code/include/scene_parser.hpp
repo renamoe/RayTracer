@@ -60,6 +60,8 @@ public:
     
     Light::SampleResult sampleLight(const Vector3f &p) const;
 
+    float lightPdf(const Vector3f &p, const Vector3f &wi) const;
+
 private:
 
     void parseFile();
