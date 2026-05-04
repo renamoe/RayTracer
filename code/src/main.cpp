@@ -23,6 +23,7 @@
 constexpr float P_RR = 0.8f;
 constexpr int NUM_SAMPLES = 32;
 constexpr float DEFAULT_EXPOSURE = 1.5f;
+constexpr float GLASS_REFLECTION_PROBABILITY = 0.5f;
 constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
 constexpr int MAX_DEPTH = 8;
 
@@ -367,7 +368,7 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         float etaI = 1.0f;
         float etaT = material->getIOR();
         bool canRefract = refract(ray.getDirection(), normal, etaI, etaT, refracted);
-        float kr = canRefract ? fresnelSchlick(ray.getDirection(), normal, etaI, etaT) : 1.0f;
+        float kr = canRefract ? GLASS_REFLECTION_PROBABILITY : 1.0f;
         
         if (Random::get_float() < kr) {
             Vector3f offsetNormal = Vector3f::dot(reflected, normal) > 0 ? normal : -normal;
