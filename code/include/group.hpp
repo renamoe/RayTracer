@@ -13,6 +13,7 @@ public:
     ~Group() override {}
 
     bool intersect(const Ray &r, Hit &h, float tmin) override;
+    bool occluded(const Ray &r, float tmin, float tmax) override;
     void addObject(int index, Object3D *obj);
     int getGroupSize() const;
     Object3D *getGroupObject(int index) const;

@@ -255,9 +255,7 @@ Vector3f estimateGlossyDirectLight(const Vector3f &pos,
 
     Vector3f shadowOrigin = pos + normal * 1e-6;
     Ray shadowRay(shadowOrigin, lightSample.dir);
-    Hit shadowHit;
-    sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-    if (shadowHit.getT() <= lightSample.dist - 1e-4) {
+    if (sceneParser->getGroup()->occluded(shadowRay, 1e-6f, lightSample.dist - 1e-4f)) {
         return Vector3f::ZERO;
     }
 
@@ -281,11 +279,9 @@ Vector3f estimateGlossyDirectLight(const Vector3f &pos,
     return lightSample.col * f_r * cosThetaX / pdfLight * wLight;
 }
 
-Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
-    Hit hit;
-    if (!sceneParser->getGroup()->intersect(ray, hit, 0)) {
-        return sceneParser->getBackgroundColor();
-    }
+Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false);
+
+Vector3f tracePathFromHit(const Ray &ray, const Hit &hit, int depth, bool fromSpecular = false) {
     Material *material = hit.getMaterial();
     Vector3f emission = Vector3f::ZERO;
     if (depth == 0 || fromSpecular) {
@@ -337,12 +333,12 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
         Ray nextRay(pos + offsetNormal * 1e-6, wi);
         Hit nextHit;
-        sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
+        bool nextIntersects = sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
 
-        bool hitLight = nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
+        bool hitLight = nextIntersects && nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
         Vector3f brdfLight = Vector3f::ZERO;
         if (hitLight) {
-            float pdfLight = sceneParser->lightPdf(pos + offsetNormal * 1e-6, wi);
+            float pdfLight = sceneParser->lightPdfFromHit(nextHit, wi);
             float wBrdf = powerHeuristic(sample.pdf, pdfLight);
 
             brdfLight = nextHit.getMaterial()->getEmission() * glossyBRDF * cosTheta / std::max(sample.pdf, 1e-6f) * wBrdf / P_RR;
@@ -350,7 +346,10 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
 
         Vector3f indirect = Vector3f::ZERO;
         if (!hitLight) {
-            indirect = tracePath(nextRay, depth + 1) * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+            Vector3f incoming = nextIntersects
+                ? tracePathFromHit(nextRay, nextHit, depth + 1)
+                : sceneParser->getBackgroundColor();
+            indirect = incoming * glossyBRDF * cosTheta / (sample.pdf * P_RR);
         }
 
         return emission + direct + brdfLight + indirect;
@@ -385,9 +384,7 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     if (sample.pdf > 0.0f && sample.dist > 0.0f) {
         Vector3f shadowOrigin = pos + normal * 1e-6;
         Ray shadowRay(shadowOrigin, sample.dir);
-        Hit shadowHit;
-        sceneParser->getGroup()->intersect(shadowRay, shadowHit, 1e-6);
-        if (shadowHit.getT() > sample.dist - 1e-4) {
+        if (!sceneParser->getGroup()->occluded(shadowRay, 1e-6f, sample.dist - 1e-4f)) {
             float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
             Vector3f f_r = material->getDiffuseColor() / M_PI;
@@ -420,14 +417,14 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     Ray nextRay(pos + normal * 1e-6, wi);
 
     Hit nextHit;
-    sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
+    bool nextIntersects = sceneParser->getGroup()->intersect(nextRay, nextHit, 1e-6f);
 
-    bool hitLight = nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
+    bool hitLight = nextIntersects && nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
     Vector3f brdfLight = Vector3f::ZERO;
     if (hitLight) {
         float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
         float pdfBrdf = diffusePdf(normal, wi);
-        float pdfLight = sceneParser->lightPdf(pos + normal * 1e-6, wi);
+        float pdfLight = sceneParser->lightPdfFromHit(nextHit, wi);
         float wBrdf = powerHeuristic(pdfBrdf, pdfLight);
 
         Vector3f f_r = material->getDiffuseColor() / M_PI;
@@ -436,7 +433,10 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
     
     Vector3f indirect = Vector3f::ZERO;
     if (!hitLight) {
-        indirect = tracePath(nextRay, depth + 1) * material->getDiffuseColor() / P_RR;
+        Vector3f incoming = nextIntersects
+            ? tracePathFromHit(nextRay, nextHit, depth + 1)
+            : sceneParser->getBackgroundColor();
+        indirect = incoming * material->getDiffuseColor() / P_RR;
     }
     
     Vector3f result = emission + direct + brdfLight + indirect;
@@ -445,6 +445,14 @@ Vector3f tracePath(Ray ray, int depth, bool fromSpecular = false) {
         return Vector3f::ZERO;
     }
     return result;
+}
+
+Vector3f tracePath(Ray ray, int depth, bool fromSpecular) {
+    Hit hit;
+    if (!sceneParser->getGroup()->intersect(ray, hit, 0)) {
+        return sceneParser->getBackgroundColor();
+    }
+    return tracePathFromHit(ray, hit, depth, fromSpecular);
 }
 
 int main(int argc, char *argv[]) {

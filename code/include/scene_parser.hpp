@@ -17,6 +17,7 @@ class Plane;
 class Triangle;
 class Transform;
 class Mesh;
+class Hit;
 
 #define MAX_PARSER_TOKEN_LENGTH 1024
 
@@ -61,6 +62,7 @@ public:
     Light::SampleResult sampleLight(const Vector3f &p) const;
 
     float lightPdf(const Vector3f &p, const Vector3f &wi) const;
+    float lightPdfFromHit(const Hit &hit, const Vector3f &wi) const;
 
 private:
 

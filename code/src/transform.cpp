@@ -35,6 +35,15 @@ bool Transform::intersect(const Ray &r, Hit &h, float tmin) {
     return true;
 }
 
+bool Transform::occluded(const Ray &r, float tmin, float tmax) {
+    Vector3f trSource = transformPoint(transform, r.getOrigin());
+    Vector3f trDirection = transformDirection(transform, r.getDirection());
+    float directionLength = trDirection.length();
+    trDirection = trDirection / directionLength;
+    Ray tr(trSource, trDirection);
+    return o->occluded(tr, tmin * directionLength, tmax * directionLength);
+}
+
 float Transform::getArea() const {
     // temporarily assess
     float s = o->getArea();

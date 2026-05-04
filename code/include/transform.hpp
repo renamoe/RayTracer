@@ -18,6 +18,7 @@ public:
     ~Transform() {}
 
     virtual bool intersect(const Ray &r, Hit &h, float tmin) override;
+    bool occluded(const Ray &r, float tmin, float tmax) override;
 
     float getArea() const override;
 

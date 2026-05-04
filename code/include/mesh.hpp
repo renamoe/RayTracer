@@ -49,6 +49,7 @@ public:
         int matIndex = -1;
     };
     bool intersect(const Ray &r, Hit &h, float tmin) override;
+    bool occluded(const Ray &r, float tmin, float tmax) override;
     Material *getTriangleMaterial(int triId) const;
 
     float getArea() const override;
@@ -61,6 +62,7 @@ private:
 
     BVHNode* buildBVH(int start, int end);
     bool intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) const;
+    bool occludedTriangle(int triId, const Ray& ray, float tmin, float tmax) const;
 
 public:
     std::vector<Vector3f> verts;

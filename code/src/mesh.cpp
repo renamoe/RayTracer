@@ -79,6 +79,37 @@ bool Mesh::intersect(const Ray &r, Hit &h, float tmin) {
     return result;
 }
 
+bool Mesh::occluded(const Ray &r, float tmin, float tmax) {
+    if (!bvhRoot || tmax < tmin) return false;
+
+    std::vector<BVHNode*> stack;
+    stack.push_back(bvhRoot);
+
+    while (!stack.empty()) {
+        BVHNode* node = stack.back();
+        stack.pop_back();
+        if (!node->box.intersect(r, tmin, tmax)) {
+            continue;
+        }
+        if (node->count > 0) {
+            for (int i = 0; i < node->count; ++i) {
+                int triId = triIds[node->start + i];
+                if (occludedTriangle(triId, r, tmin, tmax)) {
+                    return true;
+                }
+            }
+        } else {
+            if (node->left != nullptr) {
+                stack.push_back(node->left);
+            }
+            if (node->right != nullptr) {
+                stack.push_back(node->right);
+            }
+        }
+    }
+    return false;
+}
+
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
@@ -255,6 +286,31 @@ bool Mesh::intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) 
     }
     hit.set(t, getTriangleMaterial(triId), normals[triId]);
     return true;
+}
+
+bool Mesh::occludedTriangle(int triId, const Ray& ray, float tmin, float tmax) const {
+    Vector3f E1 = verts[tris[triId][1]] - verts[tris[triId][0]];
+    Vector3f E2 = verts[tris[triId][2]] - verts[tris[triId][0]];
+    Vector3f O = ray.getOrigin();
+    Vector3f D = ray.getDirection();
+    Vector3f DE2 = Vector3f::cross(D, E2);
+    float det = Vector3f::dot(E1, DE2);
+    if (std::abs(det) < 1e-6) {
+        return false;
+    }
+    float inv = 1.0f / det;
+    Vector3f S = O - verts[tris[triId][0]];
+    float u = inv * Vector3f::dot(S, DE2);
+    if (u < 0 || u > 1.0f) {
+        return false;
+    }
+    Vector3f SE1 = Vector3f::cross(S, E1);
+    float v = inv * Vector3f::dot(D, SE1);
+    if (v < 0 || u + v > 1.0f) {
+        return false;
+    }
+    float t = inv * Vector3f::dot(E2, SE1);
+    return t >= tmin && t <= tmax;
 }
 
 Material *Mesh::getTriangleMaterial(int triId) const {

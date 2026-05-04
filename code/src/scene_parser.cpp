@@ -635,7 +635,13 @@ float SceneParser::lightPdf(const Vector3f &p, const Vector3f &wi) const {
     Ray ray(p, wi);
     Hit hit;
     group->intersect(ray, hit, 1e-6f);
+    return lightPdfFromHit(hit, wi);
+}
 
+float SceneParser::lightPdfFromHit(const Hit &hit, const Vector3f &wi) const {
+    if (aux_objects.empty()) {
+        return 0.0f;
+    }
     Material *mat = hit.getMaterial();
     if (mat == nullptr || !mat->isEmissive()) {
         return 0.0f;

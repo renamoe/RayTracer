@@ -8,6 +8,15 @@ bool Group::intersect(const Ray &r, Hit &h, float tmin) {
     return hit;
 }
 
+bool Group::occluded(const Ray &r, float tmin, float tmax) {
+    for (auto &obj : objects) {
+        if (obj->occluded(r, tmin, tmax)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Group::addObject(int index, Object3D *obj) {
     objects[index] = obj;
 }

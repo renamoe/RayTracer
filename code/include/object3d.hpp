@@ -28,6 +28,11 @@ public:
 
     // Intersect Ray with this object. If hit, store information in hit structure.
     virtual bool intersect(const Ray &r, Hit &h, float tmin) = 0;
+
+    virtual bool occluded(const Ray &r, float tmin, float tmax) {
+        Hit h(tmax, nullptr, Vector3f::ZERO);
+        return intersect(r, h, tmin);
+    }
 protected:
 
     Material *material;
