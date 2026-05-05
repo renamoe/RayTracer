@@ -41,7 +41,11 @@ Image Renderer::render() {
     #pragma omp parallel for schedule(dynamic, 1)
     for (int x = 0; x < width; ++x) {
         PathTracer pathTracer(scene);
-        BDPT bdpt(scene);
+        BDPT bdpt(
+            scene,
+            config.bdptPrimaryDirectLightSamples,
+            config.bdptSecondaryDirectLightSamples
+        );
         for (int y = 0; y < height; ++y) {
             Vector3f color = Vector3f::ZERO;
             for (int i = 0; i < config.numSamples; ++i) {
@@ -80,6 +84,12 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
     std::cout << "[render stats] resolution: " << width << "x" << height
               << ", spp: " << config.numSamples
               << ", integrator: " << integratorName(config.integrator);
+    if (config.integrator == IntegratorType::BDPT) {
+        std::cout << ", direct-light samples: primary="
+                  << config.bdptPrimaryDirectLightSamples
+                  << ", secondary="
+                  << config.bdptSecondaryDirectLightSamples;
+    }
 #ifdef _OPENMP
     std::cout << ", threads: " << omp_get_max_threads();
 #endif

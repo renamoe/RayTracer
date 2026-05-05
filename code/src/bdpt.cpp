@@ -8,8 +8,6 @@
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
-constexpr int PRIMARY_DIRECT_LIGHT_SAMPLES = 4;
-constexpr int SECONDARY_DIRECT_LIGHT_SAMPLES = 1;
 
 Vector3f offsetRayOrigin(const Vector3f &pos,
                          const Vector3f &normal,
@@ -41,7 +39,12 @@ float pdfAreaFromTo(const PathVertex &from,
 
 } // namespace
 
-BDPT::BDPT(SceneParser &scene) : scene(scene) {}
+BDPT::BDPT(SceneParser &scene,
+           int primaryDirectLightSamples,
+           int secondaryDirectLightSamples)
+    : scene(scene),
+      primaryDirectLightSamples(std::max(0, primaryDirectLightSamples)),
+      secondaryDirectLightSamples(std::max(0, secondaryDirectLightSamples)) {}
 
 int BDPT::generateCameraPath(const Ray &cameraRay,
                        std::vector<PathVertex> &path,
@@ -265,7 +268,7 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
 }
 
 Vector3f BDPT::estimateDirectLight(const PathVertex &eye, int numSamples) const {
-    if (eye.material == nullptr || eye.isDelta || eye.isLight) {
+    if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
 
@@ -393,20 +396,25 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
             continue;
         }
 
-        int directLightSamples = ci == 0
-            ? PRIMARY_DIRECT_LIGHT_SAMPLES
-            : SECONDARY_DIRECT_LIGHT_SAMPLES;
-        L += estimateDirectLight(eye, directLightSamples);
+        int directSamples = ci == 0
+            ? primaryDirectLightSamples
+            : secondaryDirectLightSamples;
+        L += estimateDirectLight(eye, directSamples);
 
         for (int li = 1; li < (int)lightPath.size(); ++li) {
             const auto &light = lightPath[li];
+
+            Vector3f c = connectVertices(eye, light);
+            if (c.squaredLength() <= 0.0f) {
+                continue;
+            }
 
             float w = bdptMisWeight(ci, li);
             if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
                 std::cout << "bad mis weight: " << w << "\n";
             }
 
-            L += connectVertices(eye, light) * w;
+            L += c * w;
         }
     }
 

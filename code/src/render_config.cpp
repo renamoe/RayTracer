@@ -11,13 +11,26 @@ namespace {
 
 void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
-              << "[-n num_samples] [-e exposure] [-pt|-bdpt]" << std::endl;
+              << "[-n num_samples] [-e exposure] [-pt|-bdpt] "
+              << "[-bdpt-direct samples] "
+              << "[-bdpt-direct-primary samples] "
+              << "[-bdpt-direct-secondary samples]" << std::endl;
 }
 
 bool parsePositiveInt(const char *text, int &value) {
     char *end = nullptr;
     long parsed = std::strtol(text, &end, 10);
     if (end == text || *end != '\0' || parsed <= 0 || parsed > INT_MAX) {
+        return false;
+    }
+    value = static_cast<int>(parsed);
+    return true;
+}
+
+bool parseNonNegativeInt(const char *text, int &value) {
+    char *end = nullptr;
+    long parsed = std::strtol(text, &end, 10);
+    if (end == text || *end != '\0' || parsed < 0 || parsed > INT_MAX) {
         return false;
     }
     value = static_cast<int>(parsed);
@@ -63,6 +76,26 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
             config.integrator = IntegratorType::PT;
         } else if (arg == "-bdpt") {
             config.integrator = IntegratorType::BDPT;
+        } else if (arg == "-bdpt-direct") {
+            int samples = 0;
+            if (i + 1 >= argc || !parseNonNegativeInt(argv[++i], samples)) {
+                std::cout << "bdpt direct light samples must be a non-negative integer" << std::endl;
+                return false;
+            }
+            config.bdptPrimaryDirectLightSamples = samples;
+            config.bdptSecondaryDirectLightSamples = samples;
+        } else if (arg == "-bdpt-direct-primary") {
+            if (i + 1 >= argc ||
+                !parseNonNegativeInt(argv[++i], config.bdptPrimaryDirectLightSamples)) {
+                std::cout << "bdpt primary direct light samples must be a non-negative integer" << std::endl;
+                return false;
+            }
+        } else if (arg == "-bdpt-direct-secondary") {
+            if (i + 1 >= argc ||
+                !parseNonNegativeInt(argv[++i], config.bdptSecondaryDirectLightSamples)) {
+                std::cout << "bdpt secondary direct light samples must be a non-negative integer" << std::endl;
+                return false;
+            }
         } else {
             if (!arg.empty() && arg[0] == '-') {
                 std::cout << "unknown option: " << arg << std::endl;
@@ -84,5 +117,11 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     std::cout << "num samples per pixel: " << config.numSamples << std::endl;
     std::cout << "exposure: " << config.exposure << std::endl;
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
+    if (config.integrator == IntegratorType::BDPT) {
+        std::cout << "bdpt direct light samples: primary="
+                  << config.bdptPrimaryDirectLightSamples
+                  << ", secondary="
+                  << config.bdptSecondaryDirectLightSamples << std::endl;
+    }
     return true;
 }

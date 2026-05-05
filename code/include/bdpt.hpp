@@ -31,7 +31,9 @@ class SceneParser;
 
 class BDPT {
 public:
-    explicit BDPT(SceneParser &scene);
+    explicit BDPT(SceneParser &scene,
+                  int primaryDirectLightSamples = 1,
+                  int secondaryDirectLightSamples = 1);
 
     Vector3f trace(const Ray &cameraRay);
 
@@ -50,6 +52,8 @@ private:
     float bdptMisWeight(int ci, int li) const;
 
     SceneParser &scene;
+    int primaryDirectLightSamples;
+    int secondaryDirectLightSamples;
     std::vector<PathVertex> cameraPath;
     std::vector<PathVertex> lightPath;
 };
