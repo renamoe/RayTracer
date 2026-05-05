@@ -7,6 +7,9 @@
 
 #include <vector>
 
+constexpr int MaxCameraPathDepth = 5;
+constexpr int MaxLightPathDepth = 3;
+
 struct PathVertex {
     Vector3f pos;
     Vector3f normal;
@@ -30,7 +33,7 @@ class BDPT {
 public:
     explicit BDPT(SceneParser &scene);
 
-    Vector3f trace(const Ray &cameraRay, int maxDepth);
+    Vector3f trace(const Ray &cameraRay);
 
 private:
     int generateCameraPath(const Ray &cameraRay,

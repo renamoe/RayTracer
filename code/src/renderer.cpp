@@ -19,8 +19,6 @@
 
 namespace {
 
-constexpr int BDPT_MAX_DEPTH = 8;
-
 const char *integratorName(IntegratorType integrator) {
     return integrator == IntegratorType::BDPT ? "bdpt" : "pt";
 }
@@ -51,7 +49,7 @@ Image Renderer::render() {
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
                 if (config.integrator == IntegratorType::BDPT) {
-                    color += bdpt.trace(ray, BDPT_MAX_DEPTH);
+                    color += bdpt.trace(ray);
                 } else {
                     color += pathTracer.trace(ray);
                 }

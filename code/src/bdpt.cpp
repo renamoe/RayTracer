@@ -210,12 +210,12 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput * misWeight;
 }
 
-Vector3f BDPT::trace(const Ray &cameraRay, int maxDepth) {
+Vector3f BDPT::trace(const Ray &cameraRay) {
     cameraPath.clear();
     lightPath.clear();
 
-    generateCameraPath(cameraRay, cameraPath, maxDepth);
-    generateLightPath(lightPath, maxDepth);
+    generateCameraPath(cameraRay, cameraPath, MaxCameraPathDepth);
+    generateLightPath(lightPath, MaxLightPathDepth);
 
     Vector3f L = Vector3f::ZERO;
 
