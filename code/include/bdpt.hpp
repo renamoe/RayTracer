@@ -7,8 +7,8 @@
 
 #include <vector>
 
-constexpr int MAX_CAMERA_PATH_DEPTH = 8;
-constexpr int MAX_LIGHT_PATH_DEPTH = 8;
+constexpr int MAX_CAMERA_PATH_DEPTH = 5;
+constexpr int MAX_LIGHT_PATH_DEPTH = 3;
 
 struct PathVertex {
     Vector3f pos;
