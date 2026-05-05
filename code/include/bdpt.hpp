@@ -45,7 +45,7 @@ private:
     Vector3f connectVertices(const PathVertex &eye,
                                const PathVertex &light);
 
-    Vector3f estimateDirectLight(const PathVertex &eye) const;
+    Vector3f estimateDirectLight(const PathVertex &eye, int numSamples) const;
 
     float bdptMisWeight(int ci, int li) const;
 

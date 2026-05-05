@@ -8,6 +8,8 @@
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
+constexpr int PRIMARY_DIRECT_LIGHT_SAMPLES = 4;
+constexpr int SECONDARY_DIRECT_LIGHT_SAMPLES = 1;
 
 Vector3f offsetRayOrigin(const Vector3f &pos,
                          const Vector3f &normal,
@@ -110,7 +112,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
 
         Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
 
-        ray = Ray(pos + offsetNormal * 1e-6f, sample.wi);
+        ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
         hasPrev = true;
     }
 
@@ -153,7 +155,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
 
     for (int depth = 1; depth < maxDepth; ++depth) {
         Hit hit;
-        if (!scene.getGroup()->intersect(ray, hit, 1e-6f)) {
+        if (!scene.getGroup()->intersect(ray, hit, CONNECT_EPS)) {
             break;
         }
 
@@ -205,7 +207,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         beta = beta * sample.throughputWeight;
 
         Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
-        ray = Ray(pos + offsetNormal * 1e-6f, sample.wi);
+        ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
     }
 
     return path.size();
@@ -234,8 +236,14 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
         return Vector3f::ZERO;
     }
 
-    Ray shadowRay(offsetRayOrigin(eye.pos, eye.normal, eyeToLight), eyeToLight);
-    if (scene.getGroup()->occluded(shadowRay, 1e-6f, dist - CONNECT_EPS)) {
+    Vector3f shadowOrigin = offsetRayOrigin(eye.pos, eye.normal, eyeToLight);
+    Vector3f shadowEdge = light.pos - shadowOrigin;
+    float shadowDist = shadowEdge.length();
+    if (shadowDist <= CONNECT_EPS) {
+        return Vector3f::ZERO;
+    }
+    Ray shadowRay(shadowOrigin, shadowEdge / shadowDist);
+    if (scene.getGroup()->occluded(shadowRay, CONNECT_EPS, shadowDist - CONNECT_EPS)) {
         return Vector3f::ZERO;
     }
 
@@ -256,41 +264,49 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
 
-Vector3f BDPT::estimateDirectLight(const PathVertex &eye) const {
+Vector3f BDPT::estimateDirectLight(const PathVertex &eye, int numSamples) const {
     if (eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
 
-    Light::SampleResult sample = scene.sampleLight(eye.pos);
-    if (sample.pdf <= 0.0f || sample.dist <= 0.0f) {
-        return Vector3f::ZERO;
+    Vector3f result = Vector3f::ZERO;
+    for (int i = 0; i < numSamples; ++i) {
+        Light::SampleResult sample = scene.sampleLight(eye.pos);
+        if (sample.pdf <= 0.0f || sample.dist <= 0.0f) {
+            continue;
+        }
+
+        float cosEye = std::max(0.0f, Vector3f::dot(eye.normal, sample.dir));
+        float cosLight = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
+        if (cosEye <= 0.0f || cosLight <= 0.0f) {
+            continue;
+        }
+
+        Vector3f shadowOrigin = offsetRayOrigin(eye.pos, eye.normal, sample.dir);
+        Vector3f shadowEdge = sample.pos - shadowOrigin;
+        float shadowDist = shadowEdge.length();
+        if (shadowDist <= CONNECT_EPS) {
+            continue;
+        }
+        Ray shadowRay(shadowOrigin, shadowEdge / shadowDist);
+        if (scene.getGroup()->occluded(shadowRay, CONNECT_EPS, shadowDist - CONNECT_EPS)) {
+            continue;
+        }
+
+        Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, sample.dir);
+        if (fEye.squaredLength() <= 0.0f) {
+            continue;
+        }
+
+        float pdfLightW = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosLight);
+        if (pdfLightW <= 0.0f) {
+            continue;
+        }
+
+        result += eye.throughput * sample.col * fEye * cosEye / pdfLightW;
     }
 
-    float cosEye = std::max(0.0f, Vector3f::dot(eye.normal, sample.dir));
-    float cosLight = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-    if (cosEye <= 0.0f || cosLight <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    Ray shadowRay(offsetRayOrigin(eye.pos, eye.normal, sample.dir), sample.dir);
-    if (scene.getGroup()->occluded(shadowRay, 1e-6f, sample.dist - CONNECT_EPS)) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, sample.dir);
-    if (fEye.squaredLength() <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    float pdfLightW = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosLight);
-    if (pdfLightW <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    float pdfBsdfW = bsdfPdf(eye.material, eye.normal, eye.wo, sample.dir);
-    float misWeight = powerHeuristic(pdfLightW, pdfBsdfW);
-
-    return eye.throughput * sample.col * fEye * cosEye / pdfLightW * misWeight;
+    return result / static_cast<float>(numSamples);
 }
 
 float BDPT::bdptMisWeight(int ci, int li) const {
@@ -377,7 +393,10 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
             continue;
         }
 
-        L += estimateDirectLight(eye);
+        int directLightSamples = ci == 0
+            ? PRIMARY_DIRECT_LIGHT_SAMPLES
+            : SECONDARY_DIRECT_LIGHT_SAMPLES;
+        L += estimateDirectLight(eye, directLightSamples);
 
         for (int li = 1; li < (int)lightPath.size(); ++li) {
             const auto &light = lightPath[li];
