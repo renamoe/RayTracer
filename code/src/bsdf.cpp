@@ -135,6 +135,22 @@ float areaPdfToSolidAnglePdf(float pdfArea, float dist, float cosLight) {
     return pdfArea * dist * dist / cosLight;
 }
 
+float solidAngleToAreaPdf(float pdfW,
+                          const Vector3f &from,
+                          const Vector3f &to,
+                          const Vector3f &targetNormal) {
+    Vector3f edge = to - from;
+    float dist2 = edge.squaredLength();
+    if (pdfW <= 0.0f || dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    Vector3f dir = edge / std::sqrt(dist2);
+    float cosTarget = std::max(0.0f, Vector3f::dot(targetNormal, -dir));
+    return pdfW * cosTarget / dist2;
+}
+
+
 Vector3f evaluateCookTorranceGGX(const Vector3f &N,
                                  const Vector3f &V,
                                  const Vector3f &L,

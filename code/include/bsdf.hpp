@@ -29,7 +29,14 @@ float powerHeuristic(float pdfA, float pdfB);
 bool isFiniteColor(const Vector3f &v);
 float diffusePdf(const Vector3f &N, const Vector3f &wi);
 float ggxPdf(const Vector3f &N, const Vector3f &V, const Vector3f &L, float roughness);
+
 float areaPdfToSolidAnglePdf(float pdfArea, float dist, float cosLight);
+
+float solidAngleToAreaPdf(float pdfW,
+                          const Vector3f &from,
+                          const Vector3f &to,
+                          const Vector3f &targetNormal);
+
 Vector3f evaluateCookTorranceGGX(const Vector3f &N,
                                  const Vector3f &V,
                                  const Vector3f &L,

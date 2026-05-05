@@ -15,6 +15,28 @@ Vector3f offsetRayOrigin(const Vector3f &pos,
     return pos + (Vector3f::dot(dir, normal) > 0.0f ? normal : -normal) * CONNECT_EPS;
 }
 
+bool isDeltaMaterial(Material *mat) {
+    return mat->isGlass() ||
+        (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
+}
+
+float pdfAreaFromTo(const PathVertex &from,
+                    const Vector3f &wo,
+                    const PathVertex &to) {
+    if (from.material == nullptr || from.isDelta) {
+        return 0.0f;
+    }
+
+    Vector3f dir = (to.pos - from.pos).normalized();
+
+    float pdfW = from.isLight
+        ? std::max(0.0f, Vector3f::dot(from.normal, dir)) / M_PI
+        : bsdfPdf(from.material, from.normal, wo, dir);
+
+    return solidAngleToAreaPdf(pdfW, from.pos, to.pos, to.normal);
+}
+
+
 } // namespace
 
 BDPT::BDPT(SceneParser &scene) : scene(scene) {}
@@ -26,8 +48,8 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
     
     Ray ray = cameraRay;
     Vector3f beta(1, 1, 1);
-    float lastPdfFwd = 1.0f;
-    bool lastDelta = false;
+    bool hasPrev = false;
+    float pendingPdfW = 0.0f;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
         Hit hit;
@@ -52,10 +74,22 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         v.throughput = beta;
         v.material = mat;
         v.wo = -ray.getDirection();
-        v.pdfForward = lastPdfFwd;
         v.isDelta = mat->isGlass() || 
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+
+        if (hasPrev) {
+            PathVertex &p = path.back();
+            v.pdfForwardSolidAngle = pendingPdfW;
+            v.pdfForwardArea = solidAngleToAreaPdf(
+                v.pdfForwardSolidAngle,
+                p.pos,
+                v.pos,
+                v.normal
+            );
+        } else {
+            v.pdfForwardArea = 1.0f;
+        }
 
         path.push_back(v);
         
@@ -67,16 +101,17 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         if (sample.pdf <= 0.0f || sample.throughputWeight.length() <= 0.0f) {
             break;
         }
+
+        PathVertex &curr = path.back();
+        curr.wi = sample.wi;
+        pendingPdfW = sample.pdf;
         
         beta = beta * sample.throughputWeight;
-
-        // TODO: convert to area pdf
-        lastPdfFwd = sample.pdf;
-        lastDelta = sample.isDelta;
 
         Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
 
         ray = Ray(pos + offsetNormal * 1e-6f, sample.wi);
+        hasPrev = true;
     }
 
     return path.size();
@@ -97,7 +132,6 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
     }
 
     Vector3f sourceThroughput = emit.emission / emit.pdfPos;
-    Vector3f beta = emit.emission * cosEmit / (emit.pdfPos * emit.pdfDir);
 
     PathVertex lightVertex;
     lightVertex.pos = emit.pos;
@@ -106,14 +140,16 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
     lightVertex.material = emit.material;
     lightVertex.wo = -emit.dir;
     lightVertex.wi = emit.dir;
-    lightVertex.pdfForward = emit.pdfPos;
+    lightVertex.pdfForwardArea = emit.pdfPos;
     lightVertex.isDelta = false;
     lightVertex.isLight = true;
 
     path.push_back(lightVertex);
 
+    Vector3f beta = emit.emission * cosEmit / (emit.pdfPos * emit.pdfDir);
+
     Ray ray(emit.pos + emit.normal * 1e-4f, emit.dir);
-    float lastPdfFwd = emit.pdfDir;
+    float pendingPdfW = emit.pdfDir;
 
     for (int depth = 1; depth < maxDepth; ++depth) {
         Hit hit;
@@ -138,10 +174,18 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         v.throughput = beta;
         v.material = mat;
         v.wo = -ray.getDirection();
-        v.pdfForward = lastPdfFwd;
         v.isDelta = mat->isGlass() ||
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+
+        PathVertex &p = path.back();
+        v.pdfForwardSolidAngle = pendingPdfW;
+        v.pdfForwardArea = solidAngleToAreaPdf(
+            v.pdfForwardSolidAngle,
+            p.pos,
+            v.pos,
+            v.normal
+        );
 
         path.push_back(v);
 
@@ -154,8 +198,11 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
             break;
         }
 
+        PathVertex &curr = path.back();
+        curr.wi = sample.wi;
+        pendingPdfW = sample.pdf;
+
         beta = beta * sample.throughputWeight;
-        lastPdfFwd = sample.pdf;
 
         Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
         ray = Ray(pos + offsetNormal * 1e-6f, sample.wi);
@@ -205,10 +252,74 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
     }
 
     float geometryTerm = cosThetaEye * cosThetaLight / dist2;
-    float misWeight = 1.0f; // TODO: use BDPT MIS after tracking reverse/area PDFs.
 
-    return eye.throughput * fEye * geometryTerm * fLight * light.throughput * misWeight;
+    return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
+
+float BDPT::bdptMisWeight(int ci, int li) const {
+    constexpr float EPS = 1e-8f;
+
+    const PathVertex &eye = cameraPath[ci];
+    const PathVertex &light = lightPath[li];
+
+    Vector3f eyeToLight = (light.pos - eye.pos).normalized();
+    Vector3f lightToEye = -eyeToLight;
+
+    float sum = 1.0f;
+
+    // Move light vertices to camera side.
+    float ratio = 1.0f;
+    if (li >= 0) {
+        float pdfEyeToLight = pdfAreaFromTo(eye, eye.wo, light);
+        float denom = std::max(light.pdfForwardArea, EPS);
+
+        ratio *= pdfEyeToLight / denom;
+        sum += ratio * ratio;
+
+        Vector3f incoming = lightToEye;
+
+        for (int k = li - 1; k >= 1; --k) {
+            const PathVertex &from = lightPath[k + 1];
+            const PathVertex &to = lightPath[k];
+
+            float pdfRev = pdfAreaFromTo(from, incoming, to);
+            float pdfFwd = std::max(to.pdfForwardArea, EPS);
+
+            ratio *= pdfRev / pdfFwd;
+            sum += ratio * ratio;
+
+            incoming = (from.pos - to.pos).normalized();
+        }
+    }
+
+    // Move camera vertices to light side.
+    ratio = 1.0f;
+    if (ci > 0) {
+        float pdfLightToEye = pdfAreaFromTo(light, light.wo, eye);
+        float denom = std::max(eye.pdfForwardArea, EPS);
+
+        ratio *= pdfLightToEye / denom;
+        sum += ratio * ratio;
+
+        Vector3f incoming = eyeToLight;
+
+        for (int k = ci - 1; k >= 1; --k) {
+            const PathVertex &from = cameraPath[k + 1];
+            const PathVertex &to = cameraPath[k];
+
+            float pdfRev = pdfAreaFromTo(from, incoming, to);
+            float pdfFwd = std::max(to.pdfForwardArea, EPS);
+
+            ratio *= pdfRev / pdfFwd;
+            sum += ratio * ratio;
+
+            incoming = (from.pos - to.pos).normalized();
+        }
+    }
+
+    return 1.0f / sum;
+}
+
 
 Vector3f BDPT::trace(const Ray &cameraRay) {
     cameraPath.clear();
@@ -219,14 +330,18 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
 
     Vector3f L = Vector3f::ZERO;
 
-    for (const auto &eye : cameraPath) {
+    for (int ci = 0; ci < (int)cameraPath.size(); ++ci) {
+        const auto &eye = cameraPath[ci];
+
         if (eye.isLight) {
             L += eye.throughput * eye.material->getEmission();
             continue;
         }
 
-        for (const auto &light : lightPath) {
-            L += connectVertices(eye, light);
+        for (int li = 0; li < (int)lightPath.size(); ++li) {
+            const auto &light = lightPath[li];
+
+            L += connectVertices(eye, light) * bdptMisWeight(ci, li);
         }
     }
 

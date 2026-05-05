@@ -20,8 +20,8 @@ struct PathVertex {
     Vector3f wo;
     Vector3f wi;
 
-    float pdfForward = 0.0f;
-    float pdfReverse = 0.0f;
+    float pdfForwardArea = 0.0f;
+    float pdfForwardSolidAngle = 0.0f;
 
     bool isDelta = false;
     bool isLight = false;
@@ -44,6 +44,8 @@ private:
 
     Vector3f connectVertices(const PathVertex &eye,
                                const PathVertex &light);
+
+    float bdptMisWeight(int ci, int li) const;
 
     SceneParser &scene;
     std::vector<PathVertex> cameraPath;
