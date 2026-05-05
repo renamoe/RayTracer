@@ -1,6 +1,7 @@
 #include "bdpt.hpp"
 #include "bsdf.hpp"
 #include "group.hpp"
+#include "random.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,17 @@
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
+constexpr int RR_START_DEPTH = 2;
+constexpr float RR_MIN_CONTINUE = 0.05f;
+constexpr float RR_MAX_CONTINUE = 0.95f;
+
+float rrContinueProbability(const Vector3f &beta) {
+    float maxComp = std::max(beta.x(), std::max(beta.y(), beta.z()));
+    if (!std::isfinite(maxComp) || maxComp <= 0.0f) {
+        return 0.0f;
+    }
+    return std::min(RR_MAX_CONTINUE, std::max(RR_MIN_CONTINUE, maxComp));
+}
 
 Vector3f offsetRayOrigin(const Vector3f &pos,
                          const Vector3f &normal,
@@ -102,6 +114,19 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
             break;
         }
 
+        if (depth + 1 >= maxDepth) {
+            break;
+        }
+
+        float rrProb = 1.0f;
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
+
         BSDFSample sample = sampleBSDF(mat, normal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.length() <= 0.0f) {
             break;
@@ -109,7 +134,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
 
         PathVertex &curr = path.back();
         curr.wi = sample.wi;
-        pendingPdfW = sample.pdf;
+        pendingPdfW = sample.pdf * rrProb;
         
         beta = beta * sample.throughputWeight;
 
@@ -198,6 +223,19 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
             break;
         }
 
+        if (depth + 1 >= maxDepth) {
+            break;
+        }
+
+        float rrProb = 1.0f;
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
+
         BSDFSample sample = sampleBSDF(mat, normal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
@@ -205,7 +243,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
 
         PathVertex &curr = path.back();
         curr.wi = sample.wi;
-        pendingPdfW = sample.pdf;
+        pendingPdfW = sample.pdf * rrProb;
 
         beta = beta * sample.throughputWeight;
 
