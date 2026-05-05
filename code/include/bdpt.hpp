@@ -38,18 +38,32 @@ public:
     Vector3f trace(const Ray &cameraRay);
 
 private:
+    struct ConnectionGeometry {
+        Vector3f eyeToLight;
+        Vector3f lightToEye;
+        float dist2 = 0.0f;
+        float dist = 0.0f;
+        float cosThetaEye = 0.0f;
+        float cosThetaLight = 0.0f;
+    };
+
     int generateCameraPath(const Ray &cameraRay,
                            std::vector<PathVertex> &path,
                            int maxDepth);
 
     int generateLightPath(std::vector<PathVertex> &path, int maxDepth);
 
+    bool makeConnectionGeometry(const PathVertex &eye,
+                                const PathVertex &light,
+                                ConnectionGeometry &connection) const;
+
     Vector3f connectVertices(const PathVertex &eye,
-                               const PathVertex &light);
+                             const PathVertex &light,
+                             const ConnectionGeometry &connection);
 
     Vector3f estimateDirectLight(const PathVertex &eye, int numSamples) const;
 
-    float bdptMisWeight(int ci, int li) const;
+    float bdptMisWeight(int ci, int li, const ConnectionGeometry &connection) const;
 
     SceneParser &scene;
     int primaryDirectLightSamples;

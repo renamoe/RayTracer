@@ -6,6 +6,14 @@
 #include <algorithm>
 #include <cmath>
 
+#ifndef BDPT_DEBUG_MIS
+#define BDPT_DEBUG_MIS 0
+#endif
+
+#if BDPT_DEBUG_MIS
+#include <iostream>
+#endif
+
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
@@ -32,20 +40,38 @@ bool isDeltaMaterial(Material *mat) {
         (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
 }
 
-float pdfAreaFromTo(const PathVertex &from,
-                    const Vector3f &wo,
-                    const PathVertex &to) {
+float pdfAreaFromDirection(const PathVertex &from,
+                           const Vector3f &wo,
+                           const PathVertex &to,
+                           const Vector3f &dir,
+                           float dist2) {
     if (from.material == nullptr || from.isDelta) {
         return 0.0f;
     }
-
-    Vector3f dir = (to.pos - from.pos).normalized();
 
     float pdfW = from.isLight
         ? std::max(0.0f, Vector3f::dot(from.normal, dir)) / M_PI
         : bsdfPdf(from.material, from.normal, wo, dir);
 
-    return solidAngleToAreaPdf(pdfW, from.pos, to.pos, to.normal);
+    if (pdfW <= 0.0f || dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    float cosTarget = std::max(0.0f, Vector3f::dot(to.normal, -dir));
+    return pdfW * cosTarget / dist2;
+}
+
+float pdfAreaFromTo(const PathVertex &from,
+                    const Vector3f &wo,
+                    const PathVertex &to) {
+    Vector3f edge = to.pos - from.pos;
+    float dist2 = edge.squaredLength();
+    if (dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    Vector3f dir = edge / std::sqrt(dist2);
+    return pdfAreaFromDirection(from, wo, to, dir, dist2);
 }
 
 
@@ -128,7 +154,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         }
 
         BSDFSample sample = sampleBSDF(mat, normal, v.wo);
-        if (sample.pdf <= 0.0f || sample.throughputWeight.length() <= 0.0f) {
+        if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
         }
 
@@ -254,30 +280,38 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
     return path.size();
 }
 
+bool BDPT::makeConnectionGeometry(const PathVertex &eye,
+                                  const PathVertex &light,
+                                  ConnectionGeometry &connection) const {
+    Vector3f edge = light.pos - eye.pos;
+    connection.dist2 = edge.squaredLength();
+    if (connection.dist2 < 1e-12f) {
+        return false;
+    }
+
+    connection.dist = std::sqrt(connection.dist2);
+    connection.eyeToLight = edge / connection.dist;
+    connection.lightToEye = -connection.eyeToLight;
+    connection.cosThetaEye = std::max(
+        0.0f,
+        Vector3f::dot(eye.normal, connection.eyeToLight)
+    );
+    connection.cosThetaLight = std::max(
+        0.0f,
+        Vector3f::dot(light.normal, connection.lightToEye)
+    );
+    return connection.cosThetaEye > 0.0f && connection.cosThetaLight > 0.0f;
+}
+
 Vector3f BDPT::connectVertices(const PathVertex &eye,
-                               const PathVertex &light) {
+                               const PathVertex &light,
+                               const ConnectionGeometry &connection) {
     if (eye.material == nullptr || light.material == nullptr ||
         eye.isDelta || light.isDelta) {
         return Vector3f::ZERO;
     }
-    
-    Vector3f edge = light.pos - eye.pos;
-    float dist2 = edge.squaredLength();
-    if (dist2 < 1e-12f) {
-        return Vector3f::ZERO;
-    }
 
-    float dist = std::sqrt(dist2);
-    Vector3f eyeToLight = edge / dist;
-    Vector3f lightToEye = -eyeToLight;
-    
-    float cosThetaEye = std::max(0.0f, Vector3f::dot(eye.normal, eyeToLight));
-    float cosThetaLight = std::max(0.0f, Vector3f::dot(light.normal, lightToEye));
-    if (cosThetaEye <= 0.0f || cosThetaLight <= 0.0f) {
-        return Vector3f::ZERO;
-    }
-
-    Vector3f shadowOrigin = offsetRayOrigin(eye.pos, eye.normal, eyeToLight);
+    Vector3f shadowOrigin = offsetRayOrigin(eye.pos, eye.normal, connection.eyeToLight);
     Vector3f shadowEdge = light.pos - shadowOrigin;
     float shadowDist = shadowEdge.length();
     if (shadowDist <= CONNECT_EPS) {
@@ -288,19 +322,20 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
         return Vector3f::ZERO;
     }
 
-    Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, eyeToLight);
+    Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, connection.eyeToLight);
     if (fEye.squaredLength() <= 0.0f) {
         return Vector3f::ZERO;
     }
 
     Vector3f fLight = light.isLight
         ? Vector3f(1, 1, 1)
-        : evaluateBSDF(light.material, light.normal, light.wo, lightToEye);
+        : evaluateBSDF(light.material, light.normal, light.wo, connection.lightToEye);
     if (fLight.squaredLength() <= 0.0f) {
         return Vector3f::ZERO;
     }
 
-    float geometryTerm = cosThetaEye * cosThetaLight / dist2;
+    float geometryTerm =
+        connection.cosThetaEye * connection.cosThetaLight / connection.dist2;
 
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
@@ -350,27 +385,32 @@ Vector3f BDPT::estimateDirectLight(const PathVertex &eye, int numSamples) const 
     return result / static_cast<float>(numSamples);
 }
 
-float BDPT::bdptMisWeight(int ci, int li) const {
+float BDPT::bdptMisWeight(int ci,
+                          int li,
+                          const ConnectionGeometry &connection) const {
     constexpr float EPS = 1e-8f;
 
     const PathVertex &eye = cameraPath[ci];
     const PathVertex &light = lightPath[li];
-
-    Vector3f eyeToLight = (light.pos - eye.pos).normalized();
-    Vector3f lightToEye = -eyeToLight;
 
     float sum = 1.0f;
 
     // Move light vertices to camera side.
     float ratio = 1.0f;
     if (li >= 0) {
-        float pdfEyeToLight = pdfAreaFromTo(eye, eye.wo, light);
+        float pdfEyeToLight = pdfAreaFromDirection(
+            eye,
+            eye.wo,
+            light,
+            connection.eyeToLight,
+            connection.dist2
+        );
         float denom = std::max(light.pdfForwardArea, EPS);
 
         ratio *= pdfEyeToLight / denom;
         sum += ratio * ratio;
 
-        Vector3f incoming = lightToEye;
+        Vector3f incoming = connection.lightToEye;
 
         for (int k = li - 1; k >= 1; --k) {
             const PathVertex &from = lightPath[k + 1];
@@ -389,13 +429,19 @@ float BDPT::bdptMisWeight(int ci, int li) const {
     // Move camera vertices to light side.
     ratio = 1.0f;
     if (ci > 0) {
-        float pdfLightToEye = pdfAreaFromTo(light, light.wo, eye);
+        float pdfLightToEye = pdfAreaFromDirection(
+            light,
+            light.wo,
+            eye,
+            connection.lightToEye,
+            connection.dist2
+        );
         float denom = std::max(eye.pdfForwardArea, EPS);
 
         ratio *= pdfLightToEye / denom;
         sum += ratio * ratio;
 
-        Vector3f incoming = eyeToLight;
+        Vector3f incoming = connection.eyeToLight;
 
         for (int k = ci - 1; k >= 1; --k) {
             const PathVertex &from = cameraPath[k + 1];
@@ -442,15 +488,22 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
         for (int li = 1; li < (int)lightPath.size(); ++li) {
             const auto &light = lightPath[li];
 
-            Vector3f c = connectVertices(eye, light);
+            ConnectionGeometry connection;
+            if (!makeConnectionGeometry(eye, light, connection)) {
+                continue;
+            }
+
+            Vector3f c = connectVertices(eye, light, connection);
             if (c.squaredLength() <= 0.0f) {
                 continue;
             }
 
-            float w = bdptMisWeight(ci, li);
+            float w = bdptMisWeight(ci, li, connection);
+#if BDPT_DEBUG_MIS
             if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
                 std::cout << "bad mis weight: " << w << "\n";
             }
+#endif
 
             L += c * w;
         }
