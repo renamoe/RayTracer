@@ -350,7 +350,7 @@ BSDFSample sampleBSDF(Material *mat,
         float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
         float pdf = diffusePdf(normal, wi);
         result.wi = wi;
-        result.throughputWeight = mat->getDiffuseColor() * cosTheta / std::max(pdf, 1e-6f);
+        result.throughputWeight = mat->getDiffuseColor() * (cosTheta / (std::max(pdf, 1e-6f) * M_PI));
         result.pdf = pdf;
         result.isDelta = false;
     }

@@ -256,6 +256,43 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
 
+Vector3f BDPT::estimateDirectLight(const PathVertex &eye) const {
+    if (eye.material == nullptr || eye.isDelta || eye.isLight) {
+        return Vector3f::ZERO;
+    }
+
+    Light::SampleResult sample = scene.sampleLight(eye.pos);
+    if (sample.pdf <= 0.0f || sample.dist <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    float cosEye = std::max(0.0f, Vector3f::dot(eye.normal, sample.dir));
+    float cosLight = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
+    if (cosEye <= 0.0f || cosLight <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    Ray shadowRay(offsetRayOrigin(eye.pos, eye.normal, sample.dir), sample.dir);
+    if (scene.getGroup()->occluded(shadowRay, 1e-6f, sample.dist - CONNECT_EPS)) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, sample.dir);
+    if (fEye.squaredLength() <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    float pdfLightW = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosLight);
+    if (pdfLightW <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    float pdfBsdfW = bsdfPdf(eye.material, eye.normal, eye.wo, sample.dir);
+    float misWeight = powerHeuristic(pdfLightW, pdfBsdfW);
+
+    return eye.throughput * sample.col * fEye * cosEye / pdfLightW * misWeight;
+}
+
 float BDPT::bdptMisWeight(int ci, int li) const {
     constexpr float EPS = 1e-8f;
 
@@ -334,14 +371,23 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
         const auto &eye = cameraPath[ci];
 
         if (eye.isLight) {
-            L += eye.throughput * eye.material->getEmission();
+            if (ci == 0 || cameraPath[ci - 1].isDelta) {
+                L += eye.throughput * eye.material->getEmission();
+            }
             continue;
         }
 
-        for (int li = 0; li < (int)lightPath.size(); ++li) {
+        L += estimateDirectLight(eye);
+
+        for (int li = 1; li < (int)lightPath.size(); ++li) {
             const auto &light = lightPath[li];
 
-            L += connectVertices(eye, light) * bdptMisWeight(ci, li);
+            float w = bdptMisWeight(ci, li);
+            if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
+                std::cout << "bad mis weight: " << w << "\n";
+            }
+
+            L += connectVertices(eye, light) * w;
         }
     }
 

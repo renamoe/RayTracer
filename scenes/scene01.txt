@@ -87,7 +87,7 @@ Group {
             obj_file mesh/cube.obj
         }
     }
-    MaterialIndex 4
+    MaterialIndex 1
     Sphere {
         center 0.42 0.64 -0.12
         radius 0.16
@@ -97,7 +97,7 @@ Group {
         center -0.30 0.11 0.20
         radius 0.11
     }
-    MaterialIndex 5
+    MaterialIndex 1
     Transform {
         Translate -0.58 0 -0.18
         YRotate 32
@@ -106,7 +106,7 @@ Group {
             obj_file mesh/pyramid.obj
         }
     }
-    MaterialIndex 4
+    MaterialIndex 1
     Transform {
         Translate 0.10 0.10 0.30
         YRotate 8
@@ -115,7 +115,7 @@ Group {
             obj_file mesh/cube.obj
         }
     }
-    MaterialIndex 7
+    MaterialIndex 1
     Sphere {
         center 0.05 0.46 -0.24
         radius 0.13
