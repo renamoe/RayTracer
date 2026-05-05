@@ -17,6 +17,8 @@
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
+constexpr float MIN_CONNECT_DIST = 1e-3f;
+constexpr float MAX_CONNECTION_GEOMETRY_TERM = 1e4f;
 constexpr int RR_START_DEPTH = 2;
 constexpr float RR_MIN_CONTINUE = 0.05f;
 constexpr float RR_MAX_CONTINUE = 0.95f;
@@ -27,6 +29,10 @@ float rrContinueProbability(const Vector3f &beta) {
         return 0.0f;
     }
     return std::min(RR_MAX_CONTINUE, std::max(RR_MIN_CONTINUE, maxComp));
+}
+
+float rrContinueProbabilityAtDepth(const Vector3f &beta, int depth) {
+    return depth >= RR_START_DEPTH ? rrContinueProbability(beta) : 1.0f;
 }
 
 Vector3f offsetRayOrigin(const Vector3f &pos,
@@ -293,7 +299,7 @@ bool BDPT::makeConnectionGeometry(const PathVertex &eye,
                                   ConnectionGeometry &connection) const {
     Vector3f edge = light.pos - eye.pos;
     connection.dist2 = edge.squaredLength();
-    if (connection.dist2 < 1e-12f) {
+    if (connection.dist2 < MIN_CONNECT_DIST * MIN_CONNECT_DIST) {
         return false;
     }
 
@@ -344,11 +350,14 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
 
     float geometryTerm =
         connection.cosThetaEye * connection.cosThetaLight / connection.dist2;
+    geometryTerm = std::min(geometryTerm, MAX_CONNECTION_GEOMETRY_TERM);
 
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
 
-Vector3f BDPT::estimateDirectLight(const PathVertex &eye, int numSamples) const {
+Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
+                                   int ci,
+                                   int numSamples) const {
     if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
@@ -387,10 +396,48 @@ Vector3f BDPT::estimateDirectLight(const PathVertex &eye, int numSamples) const 
             continue;
         }
 
-        result += eye.throughput * sample.col * fEye * cosEye / pdfLightW;
+        float pdfBsdfW = bsdfPdf(eye.material, eye.normal, eye.wo, sample.dir) *
+            rrContinueProbabilityAtDepth(eye.throughput, ci);
+        float wLight = powerHeuristic(pdfLightW, pdfBsdfW);
+
+        result += eye.throughput * sample.col * fEye * cosEye / pdfLightW * wLight;
     }
 
     return result / static_cast<float>(numSamples);
+}
+
+Vector3f BDPT::estimateCameraHitLight(int ci) const {
+    const PathVertex &light = cameraPath[ci];
+    if (light.material == nullptr || !light.isLight) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f contribution = light.throughput * light.material->getEmission();
+    if (ci == 0) {
+        return contribution;
+    }
+
+    const PathVertex &prev = cameraPath[ci - 1];
+    if (prev.isDelta) {
+        return contribution;
+    }
+
+    Vector3f edge = light.pos - prev.pos;
+    float dist2 = edge.squaredLength();
+    if (dist2 <= 1e-12f) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f dir = edge / std::sqrt(dist2);
+    float pdfBsdfW = light.pdfForwardSolidAngle;
+    if (pdfBsdfW <= 0.0f) {
+        pdfBsdfW = bsdfPdf(prev.material, prev.normal, prev.wo, dir) *
+            rrContinueProbabilityAtDepth(prev.throughput, ci - 1);
+    }
+
+    float pdfLightW = scene.lightPdf(prev.pos, dir);
+    float wBsdf = powerHeuristic(pdfBsdfW, pdfLightW);
+    return contribution * wBsdf;
 }
 
 float BDPT::bdptMisWeight(int ci,
@@ -482,16 +529,14 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
         const auto &eye = cameraPath[ci];
 
         if (eye.isLight) {
-            if (ci == 0 || cameraPath[ci - 1].isDelta) {
-                L += eye.throughput * eye.material->getEmission();
-            }
+            L += estimateCameraHitLight(ci);
             continue;
         }
 
         int directSamples = ci == 0
             ? primaryDirectLightSamples
             : secondaryDirectLightSamples;
-        L += estimateDirectLight(eye, directSamples);
+        L += estimateDirectLight(eye, ci, directSamples);
 
         for (int li = 1; li < (int)lightPath.size(); ++li) {
             const auto &light = lightPath[li];
