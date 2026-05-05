@@ -18,6 +18,7 @@
 #include "triangle.hpp"
 #include "transform.hpp"
 #include "random.hpp"
+#include "bsdf.hpp"
 
 #define DegreesToRadians(x) ((M_PI * x) / 180.0f)
 
@@ -656,4 +657,33 @@ float SceneParser::lightPdfFromHit(const Hit &hit, const Vector3f &wi) const {
 
     float pdfArea = 1.0f / aux_sizes.back();
     return pdfArea * dist * dist / cosLight;
+}
+
+LightEmitSample SceneParser::sampleEmitLight() const {
+    LightEmitSample result;
+    if (aux_objects.empty() || aux_sizes.empty() || aux_sizes.back() <= 0.0f) {
+        return result;
+    }
+
+    float totalArea = aux_sizes.back();
+    float r = Random::get_float() * totalArea;
+    int i = std::lower_bound(aux_sizes.begin(), aux_sizes.end(), r) - aux_sizes.begin();
+
+    Object3D *lightObj = aux_objects[i];
+    lightObj->sample(result.pos, result.normal);
+
+    Material *mat = lightObj->getMaterial();
+    if (mat == nullptr || !mat->isEmissive()) {
+        return result;
+    }
+
+    result.material = mat;
+    result.emission = mat->getEmission();
+    result.pdfPos = 1.0f / totalArea;
+    
+    result.dir = cosineSampleHemisphere(result.normal);
+    float cosTheta = std::max(0.0f, Vector3f::dot(result.normal, result.dir));
+    result.pdfDir = cosTheta / M_PI;
+
+    return result;
 }

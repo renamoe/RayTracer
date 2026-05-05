@@ -14,7 +14,6 @@
 namespace {
 
 constexpr float P_RR = 0.8f;
-constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
 constexpr int MAX_DEPTH = 8;
 
 } // namespace

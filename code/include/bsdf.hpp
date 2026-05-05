@@ -1,11 +1,22 @@
 #pragma once
 
 #include "Vector3f.h"
+#include "material.hpp"
+
+constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
 
 struct GlossySample {
     Vector3f dir;
     float pdf;
 };
+
+struct BSDFSample {
+    Vector3f wi;
+    Vector3f throughputWeight;
+    float pdf;
+    bool isDelta;
+};
+
 
 Vector3f reflect(const Vector3f &I, const Vector3f &N);
 bool refract(const Vector3f &I,
@@ -27,3 +38,19 @@ Vector3f evaluateCookTorranceGGX(const Vector3f &N,
 GlossySample sampleGGXDirection(const Vector3f &N,
                                 const Vector3f &V,
                                 float roughness);
+
+Vector3f cosineSampleHemisphere(const Vector3f &N);
+
+Vector3f evaluateBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo,
+                      const Vector3f &wi);
+
+float bsdfPdf(Material *mat,
+              const Vector3f &normal,
+              const Vector3f &wo,
+              const Vector3f &wi);
+
+BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo);

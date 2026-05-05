@@ -199,3 +199,144 @@ GlossySample sampleGGXDirection(const Vector3f &N,
     float pdfWi = pdfH / std::max(4.0f * VoH, 1e-6f);
     return {wi.normalized(), pdfWi};
 }
+
+Vector3f cosineSampleHemisphere(const Vector3f &N) {
+    Vector3f T, B;
+    if (std::abs(N.x()) > 0.9f) {
+        T = Vector3f::cross(Vector3f(0, 1, 0), N).normalized();
+    } else {
+        T = Vector3f::cross(Vector3f(1, 0, 0), N).normalized();
+    }
+    B = Vector3f::cross(N, T).normalized();
+    float r1 = 2 * M_PI * Random::get_float();
+    float r2 = Random::get_float();
+    float r2s = std::sqrt(r2);
+    return (T * std::cos(r1) * r2s +
+            B * std::sin(r1) * r2s +
+            N * std::sqrt(1 - r2)).normalized();
+}
+
+Vector3f evaluateBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo,
+                      const Vector3f &wi) {
+    if (mat->isMirror()) {
+        if (mat->getRoughness() < DELTA_MIRROR_ROUGHNESS) {
+            return Vector3f::ZERO;
+        }
+        return evaluateCookTorranceGGX(
+            normal,
+            wo,
+            wi,
+            mat->getSpecularColor(),
+            mat->getRoughness()
+        );
+    } else if (mat->isGlass()) {
+        return Vector3f::ZERO;
+    } else {
+        if (Vector3f::dot(normal, wo) <= 0.0f ||
+            Vector3f::dot(normal, wi) <= 0.0f) {
+            return Vector3f::ZERO;
+        }
+        return mat->getDiffuseColor() / M_PI;
+    }
+}
+
+float bsdfPdf(Material *mat,
+              const Vector3f &normal,
+              const Vector3f &wo,
+              const Vector3f &wi) {
+    if (mat->isMirror()) {
+        if (mat->getRoughness() < DELTA_MIRROR_ROUGHNESS) {
+            return 0.0f;
+        }
+        return ggxPdf(normal, wo, wi, mat->getRoughness());
+    } else if (mat->isGlass()) {
+        return 0.0f;
+    } else {
+        if (Vector3f::dot(normal, wo) <= 0.0f ||
+            Vector3f::dot(normal, wi) <= 0.0f) {
+            return 0.0f;
+        }
+        return diffusePdf(normal, wi);
+    }
+}
+
+BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo) {
+    BSDFSample result;
+    if (mat->isMirror()) {
+        if (mat->getRoughness() < DELTA_MIRROR_ROUGHNESS) {
+            result.wi = reflect(-wo, normal);
+            result.throughputWeight = mat->getSpecularColor();
+            result.pdf = 1.0f;
+            result.isDelta = true;
+
+        } else {
+            GlossySample sample = sampleGGXDirection(normal, wo, mat->getRoughness());
+            if (sample.pdf <= 0.0f) {
+                result.wi = Vector3f::ZERO;
+                result.throughputWeight = Vector3f::ZERO;
+                result.pdf = 0.0f;
+                result.isDelta = false;
+                return result;
+            }
+
+            float cosTheta = std::max(Vector3f::dot(sample.dir, normal), 0.0f);
+            if (cosTheta <= 0.0f) {
+                result.wi = Vector3f::ZERO;
+                result.throughputWeight = Vector3f::ZERO;
+                result.pdf = 0.0f;
+                result.isDelta = false;
+                return result;
+            }
+
+            Vector3f glossyBRDF = evaluateCookTorranceGGX(
+                normal,
+                wo,
+                sample.dir,
+                mat->getSpecularColor(),
+                mat->getRoughness()
+            );
+            
+            result.wi = sample.dir;
+            result.throughputWeight = glossyBRDF * cosTheta / std::max(sample.pdf, 1e-6f);
+            result.pdf = sample.pdf;
+            result.isDelta = false;
+        }
+
+    } else if (mat->isGlass()) {
+        Vector3f rayDir = -wo;
+        Vector3f refracted;
+        float etaI = 1.0f;
+        float etaT = mat->getIOR();
+        bool canRefract = refract(rayDir, normal, etaI, etaT, refracted);
+        float kr = canRefract 
+            ? fresnelSchlick(rayDir, normal, etaI, etaT) 
+            : 1.0f;
+
+        // TODO: Monte Carlo weight
+        if (!canRefract || Random::get_float() < kr) {
+            result.wi = reflect(rayDir, normal);
+            result.throughputWeight = mat->getSpecularColor();
+            result.pdf = kr;
+        } else {
+            float kt = 1.0f - kr;
+            result.wi = refracted;
+            result.throughputWeight = mat->getTransmissionColor();
+            result.pdf = kt;
+        }
+        result.isDelta = true;
+
+    } else {
+        Vector3f wi = cosineSampleHemisphere(normal);
+        float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
+        float pdf = diffusePdf(normal, wi);
+        result.wi = wi;
+        result.throughputWeight = mat->getDiffuseColor() * cosTheta / std::max(pdf, 1e-6f);
+        result.pdf = pdf;
+        result.isDelta = false;
+    }
+    return result;
+}

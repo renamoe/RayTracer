@@ -21,6 +21,17 @@ class Hit;
 
 #define MAX_PARSER_TOKEN_LENGTH 1024
 
+struct LightEmitSample {
+    Vector3f pos;
+    Vector3f normal;
+    Vector3f dir;
+    Vector3f emission;
+    Material *material = nullptr;
+
+    float pdfPos = 0.0f; // area pdf
+    float pdfDir = 0.0f; // solid angle pdf
+};
+
 class SceneParser {
 public:
 
@@ -63,6 +74,8 @@ public:
 
     float lightPdf(const Vector3f &p, const Vector3f &wi) const;
     float lightPdfFromHit(const Hit &hit, const Vector3f &wi) const;
+
+    LightEmitSample sampleEmitLight() const;
 
 private:
 

@@ -9,6 +9,7 @@ ADD_SUBDIRECTORY(deps/vecmath)
 
 SET(RayTracer_SOURCES
         src/aabb.cpp
+        src/bdpt.cpp
         src/bsdf.cpp
         src/camera.cpp
         src/group.cpp
@@ -32,6 +33,7 @@ SET(RayTracer_SOURCES
 
 SET(RayTracer_INCLUDES
         include/aabb.hpp
+        include/bdpt.hpp
         include/bsdf.hpp
         include/camera.hpp
         include/group.hpp

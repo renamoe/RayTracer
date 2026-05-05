@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
 #include "Vector2f.h"
+#include "bdpt.hpp"
 #include "camera.hpp"
 #include "path_tracer.hpp"
 #include "progress.hpp"
@@ -16,6 +17,16 @@
 #include <omp.h>
 #endif
 
+namespace {
+
+constexpr int BDPT_MAX_DEPTH = 8;
+
+const char *integratorName(IntegratorType integrator) {
+    return integrator == IntegratorType::BDPT ? "bdpt" : "pt";
+}
+
+} // namespace
+
 Renderer::Renderer(SceneParser &scene, const RenderConfig &config)
     : scene(scene), config(config) {}
 
@@ -23,7 +34,6 @@ Image Renderer::render() {
     int width = scene.getCamera()->getWidth();
     int height = scene.getCamera()->getHeight();
     Image image(width, height);
-    PathTracer pathTracer(scene);
 
     const long long numPixels = static_cast<long long>(width) * height;
     ProgressBar progress(numPixels);
@@ -32,13 +42,19 @@ Image Renderer::render() {
     progress.start();
     #pragma omp parallel for schedule(dynamic, 1)
     for (int x = 0; x < width; ++x) {
+        PathTracer pathTracer(scene);
+        BDPT bdpt(scene);
         for (int y = 0; y < height; ++y) {
             Vector3f color = Vector3f::ZERO;
             for (int i = 0; i < config.numSamples; ++i) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
-                color += pathTracer.trace(ray);
+                if (config.integrator == IntegratorType::BDPT) {
+                    color += bdpt.trace(ray, BDPT_MAX_DEPTH);
+                } else {
+                    color += pathTracer.trace(ray);
+                }
             }
             color = color / static_cast<float>(config.numSamples);
             color = toneMap(color, config.exposure);
@@ -64,7 +80,8 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
 
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "[render stats] resolution: " << width << "x" << height
-              << ", spp: " << config.numSamples;
+              << ", spp: " << config.numSamples
+              << ", integrator: " << integratorName(config.integrator);
 #ifdef _OPENMP
     std::cout << ", threads: " << omp_get_max_threads();
 #endif
