@@ -214,8 +214,8 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
     cameraPath.clear();
     lightPath.clear();
 
-    generateCameraPath(cameraRay, cameraPath, MaxCameraPathDepth);
-    generateLightPath(lightPath, MaxLightPathDepth);
+    generateCameraPath(cameraRay, cameraPath, MAX_CAMERA_PATH_DEPTH);
+    generateLightPath(lightPath, MAX_LIGHT_PATH_DEPTH);
 
     Vector3f L = Vector3f::ZERO;
 
