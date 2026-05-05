@@ -27,6 +27,7 @@ struct PathVertex {
     Vector3f wi;
 
     float pdfForwardArea = 0.0f;
+    float pdfReverseArea = 0.0f;
     float pdfForwardSolidAngle = 0.0f;
 
     bool isDelta = false;
@@ -75,7 +76,7 @@ private:
 
     Vector3f connectVertices(const PathVertex &eye,
                              const PathVertex &light,
-                             const ConnectionGeometry &connection);
+                             const ConnectionGeometry &connection) const;
 
     Vector3f connectBDPT(int s,
                          int t,
@@ -86,7 +87,7 @@ private:
                                   std::vector<FilmSplat> *splats,
                                   float splatScale);
 
-    Vector3f estimateDirectLight(const PathVertex &eye, int ci, int numSamples) const;
+    Vector3f estimateDirectLight(const PathVertex &eye, int cameraIndex, int numSamples) const;
 
     Vector3f estimateCameraHitLight(int ci, bool includeLightTracingMis) const;
 
@@ -94,10 +95,19 @@ private:
                         const Vector3f &dirFromCamera,
                         float dist2) const;
 
-    float bdptMisWeight(int s, int t, const ConnectionGeometry &connection) const;
-    float bdptMisWeightLightToCamera(int s,
-                                     const Vector3f &vertexToCamera,
-                                     float cameraPdfArea) const;
+    float pdfAreaFromVertexTo(const PathVertex &from,
+                              const PathVertex *prev,
+                              const PathVertex &to) const;
+
+    float pdfAreaFromVertexToDirection(const PathVertex &from,
+                                       const Vector3f &wo,
+                                       const PathVertex &to) const;
+
+    float bdptMisWeight(const std::vector<PathVertex> &lightVertices,
+                        const std::vector<PathVertex> &cameraVertices,
+                        int s,
+                        int t,
+                        float cameraPdfArea = 0.0f) const;
 
     SceneParser &scene;
     int primaryDirectLightSamples;
