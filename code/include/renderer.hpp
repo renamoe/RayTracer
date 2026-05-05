@@ -12,6 +12,7 @@ public:
     Image render();
 
 private:
+    Image renderVCM();
     void printStats(double renderSeconds, long long numPixels, long long primarySamples) const;
 
     SceneParser &scene;

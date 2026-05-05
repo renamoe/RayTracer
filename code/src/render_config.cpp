@@ -11,7 +11,7 @@ namespace {
 
 void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
-              << "[-n num_samples] [-e exposure] [-pt|-bdpt] "
+              << "[-n num_samples] [-e exposure] [-pt|-bdpt|-vcm] "
               << "[-bdpt-direct samples] "
               << "[-bdpt-direct-primary samples] "
               << "[-bdpt-direct-secondary samples]" << std::endl;
@@ -48,7 +48,15 @@ bool parsePositiveFloat(const char *text, float &value) {
 }
 
 const char *integratorName(IntegratorType integrator) {
-    return integrator == IntegratorType::BDPT ? "bdpt" : "pt";
+    switch (integrator) {
+    case IntegratorType::PT:
+        return "pt";
+    case IntegratorType::BDPT:
+        return "bdpt";
+    case IntegratorType::VCM:
+        return "vcm";
+    }
+    return "unknown";
 }
 
 } // namespace
@@ -76,6 +84,8 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
             config.integrator = IntegratorType::PT;
         } else if (arg == "-bdpt") {
             config.integrator = IntegratorType::BDPT;
+        } else if (arg == "-vcm") {
+            config.integrator = IntegratorType::VCM;
         } else if (arg == "-bdpt-direct") {
             int samples = 0;
             if (i + 1 >= argc || !parseNonNegativeInt(argv[++i], samples)) {
@@ -117,8 +127,10 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     std::cout << "num samples per pixel: " << config.numSamples << std::endl;
     std::cout << "exposure: " << config.exposure << std::endl;
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
-    if (config.integrator == IntegratorType::BDPT) {
-        std::cout << "bdpt direct light samples: primary="
+    if (config.integrator == IntegratorType::BDPT ||
+        config.integrator == IntegratorType::VCM) {
+        std::cout << integratorName(config.integrator)
+                  << " direct light samples: primary="
                   << config.bdptPrimaryDirectLightSamples
                   << ", secondary="
                   << config.bdptSecondaryDirectLightSamples << std::endl;

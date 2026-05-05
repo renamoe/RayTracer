@@ -9,7 +9,8 @@ constexpr int DEFAULT_BDPT_SECONDARY_DIRECT_LIGHT_SAMPLES = 1;
 
 enum class IntegratorType {
     PT,
-    BDPT
+    BDPT,
+    VCM
 };
 
 struct RenderConfig {

@@ -8,10 +8,12 @@
 #include "random.hpp"
 #include "scene_parser.hpp"
 #include "tone_mapping.hpp"
+#include "vcm.hpp"
 
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <vector>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -20,7 +22,15 @@
 namespace {
 
 const char *integratorName(IntegratorType integrator) {
-    return integrator == IntegratorType::BDPT ? "bdpt" : "pt";
+    switch (integrator) {
+    case IntegratorType::PT:
+        return "pt";
+    case IntegratorType::BDPT:
+        return "bdpt";
+    case IntegratorType::VCM:
+        return "vcm";
+    }
+    return "unknown";
 }
 
 } // namespace
@@ -29,6 +39,10 @@ Renderer::Renderer(SceneParser &scene, const RenderConfig &config)
     : scene(scene), config(config) {}
 
 Image Renderer::render() {
+    if (config.integrator == IntegratorType::VCM) {
+        return renderVCM();
+    }
+
     int width = scene.getCamera()->getWidth();
     int height = scene.getCamera()->getHeight();
     Image image(width, height);
@@ -75,6 +89,65 @@ Image Renderer::render() {
     return image;
 }
 
+Image Renderer::renderVCM() {
+    int width = scene.getCamera()->getWidth();
+    int height = scene.getCamera()->getHeight();
+    Image image(width, height);
+    std::vector<Vector3f> accumulated(
+        static_cast<size_t>(width) * static_cast<size_t>(height),
+        Vector3f::ZERO
+    );
+
+    const long long numPixels = static_cast<long long>(width) * height;
+    const long long primarySamples = numPixels * static_cast<long long>(config.numSamples);
+    ProgressBar progress(primarySamples);
+
+    const auto renderStart = std::chrono::steady_clock::now();
+    progress.start();
+    for (int sampleIndex = 0; sampleIndex < config.numSamples; ++sampleIndex) {
+        VCM iterationVCM(
+            scene,
+            config.bdptPrimaryDirectLightSamples,
+            config.bdptSecondaryDirectLightSamples
+        );
+        iterationVCM.beginIteration(sampleIndex, width, height);
+
+        #pragma omp parallel for schedule(dynamic, 1)
+        for (int x = 0; x < width; ++x) {
+            VCM vcm(
+                scene,
+                config.bdptPrimaryDirectLightSamples,
+                config.bdptSecondaryDirectLightSamples
+            );
+            for (int y = 0; y < height; ++y) {
+                float dx = Random::get_float() - 0.5f;
+                float dy = Random::get_float() - 0.5f;
+                Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
+                accumulated[static_cast<size_t>(y) * width + x] += vcm.trace(ray);
+            }
+            progress.advance(height);
+        }
+    }
+
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            Vector3f color = accumulated[static_cast<size_t>(y) * width + x] /
+                static_cast<float>(config.numSamples);
+            color = toneMap(color, config.exposure);
+            image.SetPixel(x, y, color);
+        }
+    }
+
+    const auto renderEnd = std::chrono::steady_clock::now();
+    progress.finish();
+
+    const double renderSeconds =
+        std::chrono::duration<double>(renderEnd - renderStart).count();
+    printStats(renderSeconds, numPixels, primarySamples);
+
+    return image;
+}
+
 void Renderer::printStats(double renderSeconds, long long numPixels, long long primarySamples) const {
     const double statsSeconds = renderSeconds > 0.0 ? renderSeconds : 1e-9;
     int width = scene.getCamera()->getWidth();
@@ -84,7 +157,8 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
     std::cout << "[render stats] resolution: " << width << "x" << height
               << ", spp: " << config.numSamples
               << ", integrator: " << integratorName(config.integrator);
-    if (config.integrator == IntegratorType::BDPT) {
+    if (config.integrator == IntegratorType::BDPT ||
+        config.integrator == IntegratorType::VCM) {
         std::cout << ", direct-light samples: primary="
                   << config.bdptPrimaryDirectLightSamples
                   << ", secondary="
