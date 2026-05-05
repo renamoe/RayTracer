@@ -1,5 +1,6 @@
 #include "bdpt.hpp"
 #include "bsdf.hpp"
+#include "camera.hpp"
 #include "group.hpp"
 #include "random.hpp"
 
@@ -94,6 +95,15 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
                        std::vector<PathVertex> &path,
                        int maxDepth) {
     path.clear();
+
+    Camera *camera = scene.getCamera();
+    PathVertex cameraVertex;
+    cameraVertex.pos = camera->getCenter();
+    cameraVertex.normal = camera->getDirection();
+    cameraVertex.throughput = Vector3f(1, 1, 1);
+    cameraVertex.pdfForwardArea = 1.0f;
+    cameraVertex.type = PathVertexType::Camera;
+    path.push_back(cameraVertex);
     
     Ray ray = cameraRay;
     Vector3f beta(1, 1, 1);
@@ -127,6 +137,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         v.isDelta = mat->isGlass() || 
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+        v.type = PathVertexType::Surface;
 
         if (hasPrev) {
             PathVertex &p = path.back();
@@ -209,6 +220,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
     lightVertex.pdfForwardArea = emit.pdfPos;
     lightVertex.isDelta = false;
     lightVertex.isLight = true;
+    lightVertex.type = PathVertexType::Light;
 
     path.push_back(lightVertex);
 
@@ -244,6 +256,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         v.isDelta = mat->isGlass() ||
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+        v.type = PathVertexType::Surface;
 
         PathVertex &p = path.back();
         v.pdfForwardSolidAngle = pendingPdfW;
@@ -355,6 +368,177 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
 
+float BDPT::cameraAreaPdf(const PathVertex &vertex,
+                          const Vector3f &dirFromCamera,
+                          float dist2) const {
+    if (vertex.type == PathVertexType::Camera || dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    float cosSurface = std::max(0.0f, Vector3f::dot(vertex.normal, -dirFromCamera));
+    float pdfW = scene.getCamera()->rasterToSolidAnglePdf(dirFromCamera);
+    if (cosSurface <= 0.0f || pdfW <= 0.0f) {
+        return 0.0f;
+    }
+
+    return pdfW * cosSurface / dist2;
+}
+
+float BDPT::bdptMisWeightLightToCamera(int s,
+                                       const Vector3f &vertexToCamera,
+                                       float cameraPdfArea) const {
+    constexpr float EPS = 1e-8f;
+
+    int li = s - 1;
+    if (li < 0 || li >= (int)lightPath.size()) {
+        return 0.0f;
+    }
+
+    const PathVertex &light = lightPath[li];
+    float sum = 1.0f;
+    float ratio = cameraPdfArea / std::max(light.pdfForwardArea, EPS);
+    sum += ratio * ratio;
+
+    Vector3f incoming = vertexToCamera;
+    for (int k = li - 1; k >= 1; --k) {
+        const PathVertex &from = lightPath[k + 1];
+        const PathVertex &to = lightPath[k];
+
+        float pdfRev = pdfAreaFromTo(from, incoming, to);
+        float pdfFwd = std::max(to.pdfForwardArea, EPS);
+
+        ratio *= pdfRev / pdfFwd;
+        sum += ratio * ratio;
+
+        incoming = (from.pos - to.pos).normalized();
+    }
+
+    return 1.0f / sum;
+}
+
+Vector3f BDPT::connectLightToCamera(int s,
+                                    std::vector<FilmSplat> *splats,
+                                    float splatScale) {
+    if (splats == nullptr || s <= 0 || s > (int)lightPath.size() ||
+        splatScale <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    const PathVertex &light = lightPath[s - 1];
+    if (light.material == nullptr || light.isDelta) {
+        return Vector3f::ZERO;
+    }
+
+    Vector2f raster;
+    Vector3f dirFromCamera;
+    float dist = 0.0f;
+    if (!scene.getCamera()->projectPoint(light.pos, raster, dirFromCamera, dist)) {
+        return Vector3f::ZERO;
+    }
+
+    float dist2 = dist * dist;
+    float pdfCameraArea = cameraAreaPdf(light, dirFromCamera, dist2);
+    if (pdfCameraArea <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    Ray visibilityRay(scene.getCamera()->getCenter(), dirFromCamera);
+    if (scene.getGroup()->occluded(visibilityRay, CONNECT_EPS, dist - CONNECT_EPS)) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f vertexToCamera = -dirFromCamera;
+    Vector3f contribution;
+    if (s == 1) {
+        contribution = light.throughput * pdfCameraArea;
+    } else {
+        Vector3f fLight = evaluateBSDF(
+            light.material,
+            light.normal,
+            light.wo,
+            vertexToCamera
+        );
+        if (fLight.squaredLength() <= 0.0f) {
+            return Vector3f::ZERO;
+        }
+        contribution = light.throughput * fLight * pdfCameraArea;
+    }
+
+    float w = bdptMisWeightLightToCamera(s, vertexToCamera, pdfCameraArea);
+    contribution = contribution * (w * splatScale);
+    if (contribution.squaredLength() <= 0.0f || !isFiniteColor(contribution)) {
+        return Vector3f::ZERO;
+    }
+
+    FilmSplat splat;
+    splat.x = static_cast<int>(std::floor(raster.x()));
+    splat.y = static_cast<int>(std::floor(raster.y()));
+    splat.contribution = contribution;
+    splats->push_back(splat);
+
+    return Vector3f::ZERO;
+}
+
+Vector3f BDPT::connectBDPT(int s,
+                           int t,
+                           std::vector<FilmSplat> *splats,
+                           float splatScale) {
+    if (s == 0 && t == 1) {
+        return Vector3f::ZERO;
+    }
+    if (t < 1 || t > (int)cameraPath.size() ||
+        s < 0 || s > (int)lightPath.size()) {
+        return Vector3f::ZERO;
+    }
+
+    if (t == 1) {
+        return connectLightToCamera(s, splats, splatScale);
+    }
+
+    int ci = t - 1;
+    const PathVertex &eye = cameraPath[ci];
+    bool includeLightTracingMis = splats != nullptr && splatScale > 0.0f;
+    if (eye.isLight) {
+        return s == 0
+            ? estimateCameraHitLight(ci, includeLightTracingMis)
+            : Vector3f::ZERO;
+    }
+
+    if (s == 0) {
+        return estimateCameraHitLight(ci, includeLightTracingMis);
+    }
+
+    if (s == 1) {
+        int surfaceDepth = t - 2;
+        int directSamples = surfaceDepth == 0
+            ? primaryDirectLightSamples
+            : secondaryDirectLightSamples;
+        return estimateDirectLight(eye, surfaceDepth, directSamples);
+    }
+
+    int li = s - 1;
+    const PathVertex &light = lightPath[li];
+
+    ConnectionGeometry connection;
+    if (!makeConnectionGeometry(eye, light, connection)) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f c = connectVertices(eye, light, connection);
+    if (c.squaredLength() <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    float w = bdptMisWeight(s, t, connection);
+#if BDPT_DEBUG_MIS
+    if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
+        std::cout << "bad mis weight: " << w << "\n";
+    }
+#endif
+
+    return c * w;
+}
+
 Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
                                    int ci,
                                    int numSamples) const {
@@ -406,15 +590,32 @@ Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
     return result / static_cast<float>(numSamples);
 }
 
-Vector3f BDPT::estimateCameraHitLight(int ci) const {
+Vector3f BDPT::estimateCameraHitLight(int ci, bool includeLightTracingMis) const {
     const PathVertex &light = cameraPath[ci];
-    if (light.material == nullptr || !light.isLight) {
+    if (ci <= 0 || light.material == nullptr || !light.isLight) {
         return Vector3f::ZERO;
     }
 
     Vector3f contribution = light.throughput * light.material->getEmission();
-    if (ci == 0) {
-        return contribution;
+    if (ci == 1) {
+        if (!includeLightTracingMis) {
+            return contribution;
+        }
+
+        Vector2f raster;
+        Vector3f dirFromCamera;
+        float dist = 0.0f;
+        if (!scene.getCamera()->projectPoint(light.pos, raster, dirFromCamera, dist)) {
+            return contribution;
+        }
+
+        float pdfCameraArea = cameraAreaPdf(light, dirFromCamera, dist * dist);
+        float pdfLightArea = scene.lightAreaPdf();
+        if (pdfCameraArea <= 0.0f || pdfLightArea <= 0.0f) {
+            return contribution;
+        }
+
+        return contribution * powerHeuristic(pdfCameraArea, pdfLightArea);
     }
 
     const PathVertex &prev = cameraPath[ci - 1];
@@ -432,7 +633,7 @@ Vector3f BDPT::estimateCameraHitLight(int ci) const {
     float pdfBsdfW = light.pdfForwardSolidAngle;
     if (pdfBsdfW <= 0.0f) {
         pdfBsdfW = bsdfPdf(prev.material, prev.normal, prev.wo, dir) *
-            rrContinueProbabilityAtDepth(prev.throughput, ci - 1);
+            rrContinueProbabilityAtDepth(prev.throughput, ci - 2);
     }
 
     float pdfLightW = scene.lightPdf(prev.pos, dir);
@@ -440,11 +641,13 @@ Vector3f BDPT::estimateCameraHitLight(int ci) const {
     return contribution * wBsdf;
 }
 
-float BDPT::bdptMisWeight(int ci,
-                          int li,
+float BDPT::bdptMisWeight(int s,
+                          int t,
                           const ConnectionGeometry &connection) const {
     constexpr float EPS = 1e-8f;
 
+    int li = s - 1;
+    int ci = t - 1;
     const PathVertex &eye = cameraPath[ci];
     const PathVertex &light = lightPath[li];
 
@@ -517,6 +720,12 @@ float BDPT::bdptMisWeight(int ci,
 
 
 Vector3f BDPT::trace(const Ray &cameraRay) {
+    return trace(cameraRay, nullptr, 0.0f);
+}
+
+Vector3f BDPT::trace(const Ray &cameraRay,
+                     std::vector<FilmSplat> *splats,
+                     float splatScale) {
     cameraPath.clear();
     lightPath.clear();
 
@@ -525,40 +734,9 @@ Vector3f BDPT::trace(const Ray &cameraRay) {
 
     Vector3f L = Vector3f::ZERO;
 
-    for (int ci = 0; ci < (int)cameraPath.size(); ++ci) {
-        const auto &eye = cameraPath[ci];
-
-        if (eye.isLight) {
-            L += estimateCameraHitLight(ci);
-            continue;
-        }
-
-        int directSamples = ci == 0
-            ? primaryDirectLightSamples
-            : secondaryDirectLightSamples;
-        L += estimateDirectLight(eye, ci, directSamples);
-
-        for (int li = 1; li < (int)lightPath.size(); ++li) {
-            const auto &light = lightPath[li];
-
-            ConnectionGeometry connection;
-            if (!makeConnectionGeometry(eye, light, connection)) {
-                continue;
-            }
-
-            Vector3f c = connectVertices(eye, light, connection);
-            if (c.squaredLength() <= 0.0f) {
-                continue;
-            }
-
-            float w = bdptMisWeight(ci, li, connection);
-#if BDPT_DEBUG_MIS
-            if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
-                std::cout << "bad mis weight: " << w << "\n";
-            }
-#endif
-
-            L += c * w;
+    for (int t = 1; t <= (int)cameraPath.size(); ++t) {
+        for (int s = 0; s <= (int)lightPath.size(); ++s) {
+            L += connectBDPT(s, t, splats, splatScale);
         }
     }
 

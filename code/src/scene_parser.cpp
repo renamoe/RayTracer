@@ -659,6 +659,13 @@ float SceneParser::lightPdfFromHit(const Hit &hit, const Vector3f &wi) const {
     return pdfArea * dist * dist / cosLight;
 }
 
+float SceneParser::lightAreaPdf() const {
+    if (aux_objects.empty() || aux_sizes.empty() || aux_sizes.back() <= 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f / aux_sizes.back();
+}
+
 LightEmitSample SceneParser::sampleEmitLight() const {
     LightEmitSample result;
     if (aux_objects.empty() || aux_sizes.empty() || aux_sizes.back() <= 0.0f) {

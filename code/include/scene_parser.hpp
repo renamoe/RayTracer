@@ -74,6 +74,7 @@ public:
 
     float lightPdf(const Vector3f &p, const Vector3f &wi) const;
     float lightPdfFromHit(const Hit &hit, const Vector3f &wi) const;
+    float lightAreaPdf() const;
 
     LightEmitSample sampleEmitLight() const;
 

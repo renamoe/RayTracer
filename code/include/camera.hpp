@@ -19,10 +19,26 @@ public:
 
     // Generate rays for each screen-space coordinate
     virtual Ray generateRay(const Vector2f &point) = 0;
+    virtual bool projectPoint(const Vector3f &point,
+                              Vector2f &raster,
+                              Vector3f &dirFromCamera,
+                              float &dist) const {
+        (void)point;
+        (void)raster;
+        (void)dirFromCamera;
+        (void)dist;
+        return false;
+    }
+    virtual float rasterToSolidAnglePdf(const Vector3f &dirFromCamera) const {
+        (void)dirFromCamera;
+        return 0.0f;
+    }
     virtual ~Camera() = default;
 
     int getWidth() const { return width; }
     int getHeight() const { return height; }
+    const Vector3f &getCenter() const { return center; }
+    const Vector3f &getDirection() const { return direction; }
 
 protected:
     // Extrinsic parameters
@@ -46,6 +62,11 @@ public:
     }
 
     Ray generateRay(const Vector2f &point) override;
+    bool projectPoint(const Vector3f &point,
+                      Vector2f &raster,
+                      Vector3f &dirFromCamera,
+                      float &dist) const override;
+    float rasterToSolidAnglePdf(const Vector3f &dirFromCamera) const override;
 
 protected:
     float angle;

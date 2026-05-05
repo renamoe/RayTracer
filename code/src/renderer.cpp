@@ -42,6 +42,9 @@ Image Renderer::render() {
     if (config.integrator == IntegratorType::VCM) {
         return renderVCM();
     }
+    if (config.integrator == IntegratorType::BDPT) {
+        return renderBDPT();
+    }
 
     int width = scene.getCamera()->getWidth();
     int height = scene.getCamera()->getHeight();
@@ -55,22 +58,13 @@ Image Renderer::render() {
     #pragma omp parallel for schedule(dynamic, 1)
     for (int x = 0; x < width; ++x) {
         PathTracer pathTracer(scene);
-        BDPT bdpt(
-            scene,
-            config.bdptPrimaryDirectLightSamples,
-            config.bdptSecondaryDirectLightSamples
-        );
         for (int y = 0; y < height; ++y) {
             Vector3f color = Vector3f::ZERO;
             for (int i = 0; i < config.numSamples; ++i) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
-                if (config.integrator == IntegratorType::BDPT) {
-                    color += bdpt.trace(ray);
-                } else {
-                    color += pathTracer.trace(ray);
-                }
+                color += pathTracer.trace(ray);
             }
             color = color / static_cast<float>(config.numSamples);
             color = toneMap(color, config.exposure);
@@ -78,6 +72,81 @@ Image Renderer::render() {
         }
         progress.advance(height);
     }
+    const auto renderEnd = std::chrono::steady_clock::now();
+    progress.finish();
+
+    const double renderSeconds =
+        std::chrono::duration<double>(renderEnd - renderStart).count();
+    const long long primarySamples = numPixels * static_cast<long long>(config.numSamples);
+    printStats(renderSeconds, numPixels, primarySamples);
+
+    return image;
+}
+
+Image Renderer::renderBDPT() {
+    int width = scene.getCamera()->getWidth();
+    int height = scene.getCamera()->getHeight();
+    Image image(width, height);
+    std::vector<Vector3f> accumulated(
+        static_cast<size_t>(width) * static_cast<size_t>(height),
+        Vector3f::ZERO
+    );
+
+    const long long numPixels = static_cast<long long>(width) * height;
+    ProgressBar progress(numPixels);
+
+    const auto renderStart = std::chrono::steady_clock::now();
+    progress.start();
+    const float splatScale = 1.0f / static_cast<float>(numPixels);
+
+    #pragma omp parallel for schedule(dynamic, 1)
+    for (int x = 0; x < width; ++x) {
+        BDPT bdpt(
+            scene,
+            config.bdptPrimaryDirectLightSamples,
+            config.bdptSecondaryDirectLightSamples
+        );
+        std::vector<BDPT::FilmSplat> splats;
+        for (int y = 0; y < height; ++y) {
+            Vector3f color = Vector3f::ZERO;
+            for (int i = 0; i < config.numSamples; ++i) {
+                float dx = Random::get_float() - 0.5f;
+                float dy = Random::get_float() - 0.5f;
+                Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
+
+                splats.clear();
+                color += bdpt.trace(ray, &splats, splatScale);
+                for (const BDPT::FilmSplat &splat : splats) {
+                    if (splat.x < 0 || splat.x >= width ||
+                        splat.y < 0 || splat.y >= height) {
+                        continue;
+                    }
+                    size_t index = static_cast<size_t>(splat.y) * width + splat.x;
+                    #pragma omp critical(bdpt_splat_accumulate)
+                    {
+                        accumulated[index] += splat.contribution;
+                    }
+                }
+            }
+
+            size_t index = static_cast<size_t>(y) * width + x;
+            #pragma omp critical(bdpt_splat_accumulate)
+            {
+                accumulated[index] += color;
+            }
+        }
+        progress.advance(height);
+    }
+
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            Vector3f color = accumulated[static_cast<size_t>(y) * width + x] /
+                static_cast<float>(config.numSamples);
+            color = toneMap(color, config.exposure);
+            image.SetPixel(x, y, color);
+        }
+    }
+
     const auto renderEnd = std::chrono::steady_clock::now();
     progress.finish();
 
