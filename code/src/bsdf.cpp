@@ -281,7 +281,7 @@ float bsdfPdf(Material *mat,
 BSDFSample sampleBSDF(Material *mat,
                       const Vector3f &normal,
                       const Vector3f &wo) {
-    BSDFSample result;
+    BSDFSample result{Vector3f::ZERO, Vector3f::ZERO, 0.0f, false};
     if (mat->isMirror()) {
         if (mat->getRoughness() < DELTA_MIRROR_ROUGHNESS) {
             result.wi = reflect(-wo, normal);
@@ -332,7 +332,6 @@ BSDFSample sampleBSDF(Material *mat,
             ? fresnelSchlick(rayDir, normal, etaI, etaT) 
             : 1.0f;
 
-        // TODO: Monte Carlo weight
         if (!canRefract || Random::get_float() < kr) {
             result.wi = reflect(rayDir, normal);
             result.throughputWeight = mat->getSpecularColor();

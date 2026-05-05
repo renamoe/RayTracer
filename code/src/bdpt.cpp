@@ -106,7 +106,8 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         }
         
         Vector3f pos = ray.pointAtParameter(hit.getT());
-        Vector3f normal = hit.getNormal();
+        Vector3f geometryNormal = hit.getNormal();
+        Vector3f normal = geometryNormal;
         if (Vector3f::dot(normal, ray.getDirection()) > 0.0f) {
             normal = -normal;
         }
@@ -153,7 +154,8 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
             beta = beta / rrProb;
         }
 
-        BSDFSample sample = sampleBSDF(mat, normal, v.wo);
+        Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
+        BSDFSample sample = sampleBSDF(mat, bsdfNormal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
         }
@@ -164,7 +166,9 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         
         beta = beta * sample.throughputWeight;
 
-        Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
+        Vector3f offsetNormal = Vector3f::dot(sample.wi, geometryNormal) > 0.0f
+            ? geometryNormal
+            : -geometryNormal;
 
         ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
         hasPrev = true;
@@ -219,7 +223,8 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         }
 
         Vector3f pos = ray.pointAtParameter(hit.getT());
-        Vector3f normal = hit.getNormal();
+        Vector3f geometryNormal = hit.getNormal();
+        Vector3f normal = geometryNormal;
         if (Vector3f::dot(normal, ray.getDirection()) > 0.0f) {
             normal = -normal;
         }
@@ -262,7 +267,8 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
             beta = beta / rrProb;
         }
 
-        BSDFSample sample = sampleBSDF(mat, normal, v.wo);
+        Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
+        BSDFSample sample = sampleBSDF(mat, bsdfNormal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
         }
@@ -273,7 +279,9 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
 
         beta = beta * sample.throughputWeight;
 
-        Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0.0f ? normal : -normal;
+        Vector3f offsetNormal = Vector3f::dot(sample.wi, geometryNormal) > 0.0f
+            ? geometryNormal
+            : -geometryNormal;
         ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
     }
 
