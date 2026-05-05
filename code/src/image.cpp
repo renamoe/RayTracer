@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 
 #include "image.hpp"
 
@@ -11,8 +12,59 @@ Image::Image(int w, int h) {
     data = new Vector3f[width * height];
 }
 
+Image::Image(const Image &other) {
+    width = other.width;
+    height = other.height;
+    int count = width * height;
+    if (count > 0) {
+        data = new Vector3f[count];
+        std::copy(other.data, other.data + count, data);
+    } else {
+        data = nullptr;
+    }
+}
+
+Image::Image(Image &&other) noexcept {
+    width = other.width;
+    height = other.height;
+    data = other.data;
+
+    other.width = 0;
+    other.height = 0;
+    other.data = nullptr;
+}
+
 Image::~Image() {
     delete[] data;
+}
+
+Image &Image::operator=(const Image &other) {
+    if (this != &other) {
+        Image copy(other);
+        swap(copy);
+    }
+    return *this;
+}
+
+Image &Image::operator=(Image &&other) noexcept {
+    if (this != &other) {
+        delete[] data;
+
+        width = other.width;
+        height = other.height;
+        data = other.data;
+
+        other.width = 0;
+        other.height = 0;
+        other.data = nullptr;
+    }
+    return *this;
+}
+
+void Image::swap(Image &other) noexcept {
+    std::swap(width, other.width);
+    std::swap(height, other.height);
+    std::swap(data, other.data);
 }
 
 int Image::Width() const {
@@ -306,11 +358,13 @@ Image::SaveBMP(const char *filename)
     if (line == NULL)
     {
         fprintf(stderr, "Can't allocate memory for BMP file.\n");
+        fclose(file);
         return(0);
     }
 
     for (i = 0; i < height ; i++)
     {
+        memset(line, 0, bytesPerLine);
         for (j = 0; j < width; j++)
         {
             ipos = (width * i + j);

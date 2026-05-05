@@ -9,7 +9,12 @@ class Image {
 public:
 
     Image(int w, int h);
+    Image(const Image &other);
+    Image(Image &&other) noexcept;
     ~Image();
+
+    Image &operator=(const Image &other);
+    Image &operator=(Image &&other) noexcept;
 
     int Width() const;
 
@@ -38,5 +43,7 @@ private:
     int width;
     int height;
     Vector3f *data;
+
+    void swap(Image &other) noexcept;
 
 };
