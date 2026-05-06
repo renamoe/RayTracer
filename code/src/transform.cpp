@@ -31,7 +31,11 @@ bool Transform::intersect(const Ray &r, Hit &h, float tmin) {
 
     Vector3f worldNormal = transformDirection(transform.transposed(), localHit.getNormal()).normalized();
 
-    h.set(worldT, localHit.getMaterial(), worldNormal);
+    if (localHit.hasTexCoord()) {
+        h.set(worldT, localHit.getMaterial(), worldNormal, localHit.getTexCoord());
+    } else {
+        h.set(worldT, localHit.getMaterial(), worldNormal);
+    }
     return true;
 }
 

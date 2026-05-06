@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <memory>
 #include <vecmath.h>
 
 #include "Vector3f.h"
@@ -13,6 +14,8 @@ enum class MaterialType {
     GLASS,
     EMISSIVE
 };
+
+class Texture;
 
 class Material {
 public:
@@ -31,8 +34,11 @@ public:
     Vector3f getEmission() const;
 
     Vector3f getDiffuseColor() const;
+    Vector3f getDiffuseColor(const Hit &hit) const;
 
     Vector3f getSpecularColor() const;
+    void setDiffuseTexture(std::shared_ptr<Texture> texture);
+    bool hasDiffuseTexture() const;
 
     float getShininess() const;
 
@@ -58,6 +64,7 @@ protected:
     Vector3f specularColor;
     Vector3f emission;
     Vector3f transmissionColor;
+    std::shared_ptr<Texture> diffuseTexture;
     float ior;
     float shininess;
     float roughness;

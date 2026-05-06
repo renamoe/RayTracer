@@ -52,6 +52,11 @@ Vector3f evaluateBSDF(Material *mat,
                       const Vector3f &normal,
                       const Vector3f &wo,
                       const Vector3f &wi);
+Vector3f evaluateBSDF(Material *mat,
+                      const Vector3f &diffuseColor,
+                      const Vector3f &normal,
+                      const Vector3f &wo,
+                      const Vector3f &wi);
 
 float bsdfPdf(Material *mat,
               const Vector3f &normal,
@@ -59,5 +64,9 @@ float bsdfPdf(Material *mat,
               const Vector3f &wi);
 
 BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo);
+BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &diffuseColor,
                       const Vector3f &normal,
                       const Vector3f &wo);

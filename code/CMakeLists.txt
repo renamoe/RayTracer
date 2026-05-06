@@ -27,6 +27,7 @@ SET(RayTracer_SOURCES
         src/renderer.cpp
         src/scene_parser.cpp
         src/sphere.cpp
+        src/texture.cpp
         src/tone_mapping.cpp
         src/transform.cpp
         src/triangle.cpp
@@ -52,6 +53,7 @@ SET(RayTracer_INCLUDES
         include/renderer.hpp
         include/scene_parser.hpp
         include/sphere.hpp
+        include/texture.hpp
         include/tone_mapping.hpp
         include/transform.hpp
         include/triangle.hpp

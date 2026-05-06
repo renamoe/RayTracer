@@ -1,5 +1,7 @@
 #include "material.hpp"
+#include "texture.hpp"
 #include <algorithm>
+#include <utility>
 
 Material::Material(const Vector3f &d_color,
                    const Vector3f &s_color,
@@ -20,8 +22,23 @@ Vector3f Material::getDiffuseColor() const {
     return diffuseColor;
 }
 
+Vector3f Material::getDiffuseColor(const Hit &hit) const {
+    if (diffuseTexture && hit.hasTexCoord()) {
+        return diffuseColor * diffuseTexture->sample(hit.getTexCoord());
+    }
+    return diffuseColor;
+}
+
 Vector3f Material::getSpecularColor() const {
     return specularColor;
+}
+
+void Material::setDiffuseTexture(std::shared_ptr<Texture> texture) {
+    diffuseTexture = std::move(texture);
+}
+
+bool Material::hasDiffuseTexture() const {
+    return diffuseTexture != nullptr;
 }
 
 float Material::getShininess() const {
@@ -64,7 +81,8 @@ Vector3f Material::Shade(const Ray &ray, const Hit &hit,
     Vector3f L = dirToLight;
     Vector3f V = -ray.getDirection();
     Vector3f R = (2.0f * Vector3f::dot(N, L)) * N - L;
-    shaded += (diffuseColor * std::max(Vector3f::dot(N, L), 0.0f)
+    Vector3f albedo = getDiffuseColor(hit);
+    shaded += (albedo * std::max(Vector3f::dot(N, L), 0.0f)
                 + specularColor * std::pow(std::max(Vector3f::dot(R, V), 0.0f), shininess)) * lightColor;
     return shaded;
 }

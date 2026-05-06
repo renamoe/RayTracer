@@ -1,4 +1,5 @@
 #include "sphere.hpp"
+#include "Vector2f.h"
 #include <cmath>
 
 Sphere::Sphere() : center(Vector3f::ZERO), radius(1.0f), Object3D(nullptr) {}
@@ -25,7 +26,9 @@ bool Sphere::intersect(const Ray &r, Hit &h, float tmin) {
         return false;
     }
     Vector3f normal = (r.pointAtParameter(t) - center).normalized();
-    h.set(t, material, normal);
+    float u = 0.5f + std::atan2(normal.z(), normal.x()) / (2.0f * M_PI);
+    float v = 0.5f - std::asin(normal.y()) / M_PI;
+    h.set(t, material, normal, Vector2f(u, v));
     return true;
 }
 

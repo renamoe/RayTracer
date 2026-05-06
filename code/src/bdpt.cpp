@@ -113,6 +113,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         v.pos = pos;
         v.normal = normal;
         v.throughput = beta;
+        v.diffuseColor = mat->getDiffuseColor(hit);
         v.material = mat;
         v.wo = -ray.getDirection();
         v.isDelta = mat->isGlass() || 
@@ -159,7 +160,7 @@ int BDPT::generateCameraPath(const Ray &cameraRay,
         }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
-        BSDFSample sample = sampleBSDF(mat, bsdfNormal, v.wo);
+        BSDFSample sample = sampleBSDF(mat, v.diffuseColor, bsdfNormal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
         }
@@ -242,6 +243,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         v.pos = pos;
         v.normal = normal;
         v.throughput = beta;
+        v.diffuseColor = mat->getDiffuseColor(hit);
         v.material = mat;
         v.wo = -ray.getDirection();
         v.isDelta = mat->isGlass() ||
@@ -278,7 +280,7 @@ int BDPT::generateLightPath(std::vector<PathVertex> &path, int maxDepth) {
         }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
-        BSDFSample sample = sampleBSDF(mat, bsdfNormal, v.wo);
+        BSDFSample sample = sampleBSDF(mat, v.diffuseColor, bsdfNormal, v.wo);
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
         }
@@ -345,14 +347,26 @@ Vector3f BDPT::connectVertices(const PathVertex &eye,
         return Vector3f::ZERO;
     }
 
-    Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, connection.eyeToLight);
+    Vector3f fEye = evaluateBSDF(
+        eye.material,
+        eye.diffuseColor,
+        eye.normal,
+        eye.wo,
+        connection.eyeToLight
+    );
     if (fEye.squaredLength() <= 0.0f) {
         return Vector3f::ZERO;
     }
 
     Vector3f fLight = light.isLight
         ? Vector3f(1, 1, 1)
-        : evaluateBSDF(light.material, light.normal, light.wo, connection.lightToEye);
+        : evaluateBSDF(
+            light.material,
+            light.diffuseColor,
+            light.normal,
+            light.wo,
+            connection.lightToEye
+        );
     if (fLight.squaredLength() <= 0.0f) {
         return Vector3f::ZERO;
     }
@@ -551,6 +565,7 @@ Vector3f BDPT::connectLightToCamera(int s,
     } else {
         Vector3f fLight = evaluateBSDF(
             light.material,
+            light.diffuseColor,
             light.normal,
             light.wo,
             vertexToCamera

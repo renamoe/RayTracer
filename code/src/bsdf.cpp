@@ -236,6 +236,14 @@ Vector3f evaluateBSDF(Material *mat,
                       const Vector3f &normal,
                       const Vector3f &wo,
                       const Vector3f &wi) {
+    return evaluateBSDF(mat, mat->getDiffuseColor(), normal, wo, wi);
+}
+
+Vector3f evaluateBSDF(Material *mat,
+                      const Vector3f &diffuseColor,
+                      const Vector3f &normal,
+                      const Vector3f &wo,
+                      const Vector3f &wi) {
     if (mat->isMirror()) {
         if (mat->getRoughness() < DELTA_MIRROR_ROUGHNESS) {
             return Vector3f::ZERO;
@@ -254,7 +262,7 @@ Vector3f evaluateBSDF(Material *mat,
             Vector3f::dot(normal, wi) <= 0.0f) {
             return Vector3f::ZERO;
         }
-        return mat->getDiffuseColor() / M_PI;
+        return diffuseColor / M_PI;
     }
 }
 
@@ -279,6 +287,13 @@ float bsdfPdf(Material *mat,
 }
 
 BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &normal,
+                      const Vector3f &wo) {
+    return sampleBSDF(mat, mat->getDiffuseColor(), normal, wo);
+}
+
+BSDFSample sampleBSDF(Material *mat,
+                      const Vector3f &diffuseColor,
                       const Vector3f &normal,
                       const Vector3f &wo) {
     BSDFSample result{Vector3f::ZERO, Vector3f::ZERO, 0.0f, false};
@@ -349,7 +364,7 @@ BSDFSample sampleBSDF(Material *mat,
         float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
         float pdf = diffusePdf(normal, wi);
         result.wi = wi;
-        result.throughputWeight = mat->getDiffuseColor() * (cosTheta / (std::max(pdf, 1e-6f) * M_PI));
+        result.throughputWeight = diffuseColor * (cosTheta / (std::max(pdf, 1e-6f) * M_PI));
         result.pdf = pdf;
         result.isDelta = false;
     }

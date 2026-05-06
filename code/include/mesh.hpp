@@ -35,6 +35,7 @@ public:
         const int &operator[](const int i) const { return x[i]; }
         // By Computer Graphics convention, counterclockwise winding is front face
         int x[3]{};
+        int texcoord[3] = {-1, -1, -1};
         int matIndex = -1;
     };
     bool intersect(const Ray &r, Hit &h, float tmin) override;
@@ -53,6 +54,8 @@ private:
         Vector3f centroid;
         AABB box;
         Material *material = nullptr;
+        Vector2f texCoord[3];
+        bool hasTexCoords = false;
         float area = 0.0f;
     };
 
@@ -64,6 +67,7 @@ private:
 
 public:
     std::vector<Vector3f> verts;
+    std::vector<Vector2f> texcoords;
     std::vector<TriangleIndex> tris;
     std::vector<Vector3f> normals;
     std::vector<Material*> mtl_materials;

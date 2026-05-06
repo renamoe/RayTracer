@@ -158,6 +158,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         }
     }
 
+    Vector3f albedo = material->getDiffuseColor(hit);
     Light::SampleResult sample = scene.sampleLight(pos);
     Vector3f direct = Vector3f::ZERO;
     if (sample.pdf > 0.0f && sample.dist > 0.0f) {
@@ -166,7 +167,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         if (!scene.getGroup()->occluded(shadowRay, 1e-6f, sample.dist - 1e-4f)) {
             float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-            Vector3f f_r = material->getDiffuseColor() / M_PI;
+            Vector3f f_r = albedo / M_PI;
             float pdfLight = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosThetaY);
             float pdfBrdf = diffusePdf(normal, sample.dir);
             if (pdfLight > 0.0f) {
@@ -206,7 +207,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         float pdfLight = scene.lightPdfFromHit(nextHit, wi);
         float wBrdf = powerHeuristic(pdfBrdf, pdfLight);
 
-        Vector3f f_r = material->getDiffuseColor() / M_PI;
+        Vector3f f_r = albedo / M_PI;
         brdfLight = nextHit.getMaterial()->getEmission() * f_r * cosTheta / std::max(pdfBrdf, 1e-6f) * wBrdf / P_RR;
     }
 
@@ -215,7 +216,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Vector3f incoming = nextIntersects
             ? traceFromHit(nextRay, nextHit, depth + 1)
             : scene.getBackgroundColor();
-        indirect = incoming * material->getDiffuseColor() / P_RR;
+        indirect = incoming * albedo / P_RR;
     }
 
     Vector3f result = emission + direct + brdfLight + indirect;

@@ -17,6 +17,7 @@
 #include "plane.hpp"
 #include "triangle.hpp"
 #include "transform.hpp"
+#include "texture.hpp"
 #include "random.hpp"
 #include "bsdf.hpp"
 
@@ -323,6 +324,9 @@ Material *SceneParser::parseMaterial(MaterialType defaultType) {
         type = MaterialType::EMISSIVE;
     }
     auto *answer = new Material(diffuseColor, specularColor, emission, shininess, type, transmissionColor, ior, roughness);
+    if (filename[0] != 0) {
+        answer->setDiffuseTexture(Texture::load(filename));
+    }
     return answer;
 }
 

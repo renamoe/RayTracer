@@ -20,6 +20,7 @@ struct PathVertex {
     Vector3f pos;
     Vector3f normal;
     Vector3f throughput;
+    Vector3f diffuseColor = Vector3f(1, 1, 1);
 
     Material *material = nullptr;
 

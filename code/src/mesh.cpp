@@ -1,13 +1,30 @@
 #include "mesh.hpp"
 #include "triangle.hpp"
+#include "texture.hpp"
 #include <iostream>
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <string>
 
 namespace {
 
 constexpr int BVH_STACK_SIZE = 128;
+
+std::string directoryOf(const std::string &filename) {
+    std::string::size_type pos = std::string::npos;
+    for (std::string::size_type i = filename.size(); i > 0; --i) {
+        char c = filename[i - 1];
+        if (c == '/' || c == '\\') {
+            pos = i - 1;
+            break;
+        }
+    }
+    if (pos == std::string::npos) {
+        return "";
+    }
+    return filename.substr(0, pos + 1);
+}
 
 } // namespace
 
@@ -84,12 +101,14 @@ bool Mesh::getBoundingBox(AABB &box) const {
 #include "tiny_obj_loader.h"
 
 Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
+    std::string objFilename = normalizeTexturePath(filename);
+    std::string baseDir = directoryOf(objFilename);
 
     tinyobj::ObjReaderConfig reader_config;
-    reader_config.mtl_search_path = ""; // Auto-deduce from filename
+    reader_config.mtl_search_path = baseDir;
     tinyobj::ObjReader reader;
 
-    if (!reader.ParseFromFile(filename, reader_config)) {
+    if (!reader.ParseFromFile(objFilename, reader_config)) {
         if (!reader.Error().empty()) {
             std::cerr << "TinyObjReader: " << reader.Error();
         }
@@ -107,17 +126,25 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
 
     // Parse MTL materials
     for (const auto& m : materials) {
-        mtl_materials.push_back(new Material(
+        auto *mat = new Material(
             Vector3f(m.diffuse[0], m.diffuse[1], m.diffuse[2]),
             Vector3f(m.specular[0], m.specular[1], m.specular[2]),
             Vector3f(m.emission[0], m.emission[1], m.emission[2]),
             m.shininess
-        ));
+        );
+        if (!m.diffuse_texname.empty()) {
+            mat->setDiffuseTexture(Texture::load(resolveRelativePath(objFilename, m.diffuse_texname)));
+        }
+        mtl_materials.push_back(mat);
     }
 
     // Copy vertices
     for (size_t i = 0; i < attrib.vertices.size(); i += 3) {
         verts.push_back(Vector3f(attrib.vertices[i], attrib.vertices[i+1], attrib.vertices[i+2]));
+    }
+
+    for (size_t i = 0; i + 1 < attrib.texcoords.size(); i += 2) {
+        texcoords.push_back(Vector2f(attrib.texcoords[i], attrib.texcoords[i + 1]));
     }
 
     // Copy triangles
@@ -132,6 +159,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
                 for (size_t v_idx = 0; v_idx < 3; v_idx++) {
                     tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v_idx];
                     trig[v_idx] = idx.vertex_index;
+                    trig.texcoord[v_idx] = idx.texcoord_index;
                 }
                 trig.matIndex = shapes[s].mesh.material_ids[f];
                 tris.push_back(trig);
@@ -176,6 +204,16 @@ void Mesh::computeTriangleData() {
         data.centroid = (data.v0 + verts[triIndex[1]] + verts[triIndex[2]]) / 3.0f;
         data.box = AABB(data.v0, verts[triIndex[1]], verts[triIndex[2]]);
         data.material = getTriangleMaterial(triId);
+        data.hasTexCoords = true;
+        for (int i = 0; i < 3; ++i) {
+            int texcoordIndex = triIndex.texcoord[i];
+            if (texcoordIndex >= 0 && texcoordIndex < (int)texcoords.size()) {
+                data.texCoord[i] = texcoords[texcoordIndex];
+            } else {
+                data.texCoord[i] = Vector2f::ZERO;
+                data.hasTexCoords = false;
+            }
+        }
 
         normals[triId] = data.normal;
     }
@@ -251,7 +289,14 @@ bool Mesh::intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) 
     if (t < tmin || t > hit.getT()) {
         return false;
     }
-    hit.set(t, data.material, data.normal);
+    if (data.hasTexCoords) {
+        Vector2f uv = data.texCoord[0] * (1.0f - u - v) +
+                      data.texCoord[1] * u +
+                      data.texCoord[2] * v;
+        hit.set(t, data.material, data.normal, uv);
+    } else {
+        hit.set(t, data.material, data.normal);
+    }
     return true;
 }
 
