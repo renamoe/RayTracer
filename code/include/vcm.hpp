@@ -7,8 +7,14 @@
 
 #include <vector>
 
-constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 5;
-constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 3;
+constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 8;
+constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 5;
+
+enum class VCMPathVertexType {
+    Camera,
+    Light,
+    Surface
+};
 
 struct VCMPathVertex {
     Vector3f pos;
@@ -21,16 +27,24 @@ struct VCMPathVertex {
     Vector3f wi;
 
     float pdfForwardArea = 0.0f;
+    float pdfReverseArea = 0.0f;
     float pdfForwardSolidAngle = 0.0f;
 
     bool isDelta = false;
     bool isLight = false;
+    VCMPathVertexType type = VCMPathVertexType::Surface;
 };
 
 class SceneParser;
 
 class VCM {
 public:
+    struct FilmSplat {
+        int x = 0;
+        int y = 0;
+        Vector3f contribution;
+    };
+
     explicit VCM(SceneParser &scene,
                  int primaryDirectLightSamples = 1,
                  int secondaryDirectLightSamples = 1);
@@ -38,6 +52,9 @@ public:
     void beginIteration(int iteration, int width, int height);
 
     Vector3f trace(const Ray &cameraRay);
+    Vector3f trace(const Ray &cameraRay,
+                   std::vector<FilmSplat> *splats,
+                   float splatScale);
 
 private:
     struct ConnectionGeometry {
@@ -61,13 +78,38 @@ private:
 
     Vector3f connectVertices(const VCMPathVertex &eye,
                              const VCMPathVertex &light,
-                             const ConnectionGeometry &connection);
+                             const ConnectionGeometry &connection) const;
 
-    Vector3f estimateDirectLight(const VCMPathVertex &eye, int ci, int numSamples) const;
+    Vector3f connectVCM(int s,
+                        int t,
+                        std::vector<FilmSplat> *splats,
+                        float splatScale);
 
-    Vector3f estimateCameraHitLight(int ci) const;
+    Vector3f connectLightToCamera(int s,
+                                  std::vector<FilmSplat> *splats,
+                                  float splatScale);
 
-    float vcmMisWeight(int ci, int li, const ConnectionGeometry &connection) const;
+    Vector3f estimateDirectLight(const VCMPathVertex &eye, int cameraIndex, int numSamples) const;
+
+    Vector3f estimateCameraHitLight(int ci, bool includeLightTracingMis) const;
+
+    float cameraAreaPdf(const VCMPathVertex &vertex,
+                        const Vector3f &dirFromCamera,
+                        float dist2) const;
+
+    float pdfAreaFromVertexTo(const VCMPathVertex &from,
+                              const VCMPathVertex *prev,
+                              const VCMPathVertex &to) const;
+
+    float pdfAreaFromVertexToDirection(const VCMPathVertex &from,
+                                       const Vector3f &wo,
+                                       const VCMPathVertex &to) const;
+
+    float vcmMisWeight(const std::vector<VCMPathVertex> &lightVertices,
+                       const std::vector<VCMPathVertex> &cameraVertices,
+                       int s,
+                       int t,
+                       float cameraPdfArea = 0.0f) const;
 
     SceneParser &scene;
     int primaryDirectLightSamples;

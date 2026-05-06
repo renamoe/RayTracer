@@ -173,6 +173,7 @@ Image Renderer::renderVCM() {
 
     const auto renderStart = std::chrono::steady_clock::now();
     progress.start();
+    const float splatScale = 1.0f / static_cast<float>(numPixels);
     for (int sampleIndex = 0; sampleIndex < config.numSamples; ++sampleIndex) {
         VCM iterationVCM(
             scene,
@@ -188,11 +189,31 @@ Image Renderer::renderVCM() {
                 config.bdptPrimaryDirectLightSamples,
                 config.bdptSecondaryDirectLightSamples
             );
+            std::vector<VCM::FilmSplat> splats;
             for (int y = 0; y < height; ++y) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
-                accumulated[static_cast<size_t>(y) * width + x] += vcm.trace(ray);
+
+                splats.clear();
+                Vector3f color = vcm.trace(ray, &splats, splatScale);
+                for (const VCM::FilmSplat &splat : splats) {
+                    if (splat.x < 0 || splat.x >= width ||
+                        splat.y < 0 || splat.y >= height) {
+                        continue;
+                    }
+                    size_t index = static_cast<size_t>(splat.y) * width + splat.x;
+                    #pragma omp critical(vcm_splat_accumulate)
+                    {
+                        accumulated[index] += splat.contribution;
+                    }
+                }
+
+                size_t index = static_cast<size_t>(y) * width + x;
+                #pragma omp critical(vcm_splat_accumulate)
+                {
+                    accumulated[index] += color;
+                }
             }
             progress.advance(height);
         }

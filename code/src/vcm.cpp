@@ -1,5 +1,6 @@
 #include "vcm.hpp"
 #include "bsdf.hpp"
+#include "camera.hpp"
 #include "group.hpp"
 #include "random.hpp"
 
@@ -31,14 +32,14 @@ float rrContinueProbability(const Vector3f &beta) {
     return std::min(RR_MAX_CONTINUE, std::max(RR_MIN_CONTINUE, maxComp));
 }
 
-float rrContinueProbabilityAtDepth(const Vector3f &beta, int depth) {
-    return depth >= RR_START_DEPTH ? rrContinueProbability(beta) : 1.0f;
-}
-
 Vector3f offsetRayOrigin(const Vector3f &pos,
                          const Vector3f &normal,
                          const Vector3f &dir) {
     return pos + (Vector3f::dot(dir, normal) > 0.0f ? normal : -normal) * CONNECT_EPS;
+}
+
+float remap0(float pdf) {
+    return pdf > 0.0f && std::isfinite(pdf) ? pdf : 1.0f;
 }
 
 float pdfAreaFromDirection(const VCMPathVertex &from,
@@ -46,7 +47,7 @@ float pdfAreaFromDirection(const VCMPathVertex &from,
                            const VCMPathVertex &to,
                            const Vector3f &dir,
                            float dist2) {
-    if (from.material == nullptr || from.isDelta) {
+    if ((!from.isLight && from.material == nullptr) || from.isDelta) {
         return 0.0f;
     }
 
@@ -60,19 +61,6 @@ float pdfAreaFromDirection(const VCMPathVertex &from,
 
     float cosTarget = std::max(0.0f, Vector3f::dot(to.normal, -dir));
     return pdfW * cosTarget / dist2;
-}
-
-float pdfAreaFromTo(const VCMPathVertex &from,
-                    const Vector3f &wo,
-                    const VCMPathVertex &to) {
-    Vector3f edge = to.pos - from.pos;
-    float dist2 = edge.squaredLength();
-    if (dist2 <= 1e-12f) {
-        return 0.0f;
-    }
-
-    Vector3f dir = edge / std::sqrt(dist2);
-    return pdfAreaFromDirection(from, wo, to, dir, dist2);
 }
 
 } // namespace
@@ -95,9 +83,18 @@ int VCM::generateCameraPath(const Ray &cameraRay,
                             int maxDepth) {
     path.clear();
 
+    Camera *camera = scene.getCamera();
+    VCMPathVertex cameraVertex;
+    cameraVertex.pos = camera->getCenter();
+    cameraVertex.normal = camera->getDirection();
+    cameraVertex.throughput = Vector3f(1, 1, 1);
+    cameraVertex.pdfForwardArea = 1.0f;
+    cameraVertex.type = VCMPathVertexType::Camera;
+    cameraVertex.wi = cameraRay.getDirection();
+    path.push_back(cameraVertex);
+
     Ray ray = cameraRay;
     Vector3f beta(1, 1, 1);
-    bool hasPrev = false;
     float pendingPdfW = 0.0f;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
@@ -127,9 +124,18 @@ int VCM::generateCameraPath(const Ray &cameraRay,
         v.isDelta = mat->isGlass() ||
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+        v.type = VCMPathVertexType::Surface;
 
-        if (hasPrev) {
-            VCMPathVertex &p = path.back();
+        VCMPathVertex &p = path.back();
+        if (p.type == VCMPathVertexType::Camera) {
+            v.pdfForwardSolidAngle =
+                scene.getCamera()->rasterToSolidAnglePdf(ray.getDirection());
+            v.pdfForwardArea = cameraAreaPdf(
+                v,
+                ray.getDirection(),
+                (v.pos - p.pos).squaredLength()
+            );
+        } else {
             v.pdfForwardSolidAngle = pendingPdfW;
             v.pdfForwardArea = solidAngleToAreaPdf(
                 v.pdfForwardSolidAngle,
@@ -137,8 +143,6 @@ int VCM::generateCameraPath(const Ray &cameraRay,
                 v.pos,
                 v.normal
             );
-        } else {
-            v.pdfForwardArea = 1.0f;
         }
 
         path.push_back(v);
@@ -168,6 +172,11 @@ int VCM::generateCameraPath(const Ray &cameraRay,
 
         VCMPathVertex &curr = path.back();
         curr.wi = sample.wi;
+        if (path.size() >= 2) {
+            VCMPathVertex &prev = path[path.size() - 2];
+            prev.pdfReverseArea =
+                pdfAreaFromVertexToDirection(curr, sample.wi, prev) * rrProb;
+        }
         pendingPdfW = sample.pdf * rrProb;
 
         beta = beta * sample.throughputWeight;
@@ -177,7 +186,6 @@ int VCM::generateCameraPath(const Ray &cameraRay,
             : -geometryNormal;
 
         ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
-        hasPrev = true;
     }
 
     return path.size();
@@ -209,6 +217,7 @@ int VCM::generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth) {
     lightVertex.pdfForwardArea = emit.pdfPos;
     lightVertex.isDelta = false;
     lightVertex.isLight = true;
+    lightVertex.type = VCMPathVertexType::Light;
 
     path.push_back(lightVertex);
 
@@ -244,6 +253,7 @@ int VCM::generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth) {
         v.isDelta = mat->isGlass() ||
             (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
         v.isLight = mat->isEmissive();
+        v.type = VCMPathVertexType::Surface;
 
         VCMPathVertex &p = path.back();
         v.pdfForwardSolidAngle = pendingPdfW;
@@ -281,6 +291,11 @@ int VCM::generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth) {
 
         VCMPathVertex &curr = path.back();
         curr.wi = sample.wi;
+        if (path.size() >= 2) {
+            VCMPathVertex &prev = path[path.size() - 2];
+            prev.pdfReverseArea =
+                pdfAreaFromVertexToDirection(curr, sample.wi, prev) * rrProb;
+        }
         pendingPdfW = sample.pdf * rrProb;
 
         beta = beta * sample.throughputWeight;
@@ -319,8 +334,8 @@ bool VCM::makeConnectionGeometry(const VCMPathVertex &eye,
 
 Vector3f VCM::connectVertices(const VCMPathVertex &eye,
                               const VCMPathVertex &light,
-                              const ConnectionGeometry &connection) {
-    if (eye.material == nullptr || light.material == nullptr ||
+                              const ConnectionGeometry &connection) const {
+    if (eye.material == nullptr || (!light.isLight && light.material == nullptr) ||
         eye.isDelta || light.isDelta) {
         return Vector3f::ZERO;
     }
@@ -355,8 +370,284 @@ Vector3f VCM::connectVertices(const VCMPathVertex &eye,
     return eye.throughput * fEye * geometryTerm * fLight * light.throughput;
 }
 
+float VCM::cameraAreaPdf(const VCMPathVertex &vertex,
+                         const Vector3f &dirFromCamera,
+                         float dist2) const {
+    if (vertex.type == VCMPathVertexType::Camera || dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    float cosSurface = std::max(0.0f, Vector3f::dot(vertex.normal, -dirFromCamera));
+    float pdfW = scene.getCamera()->rasterToSolidAnglePdf(dirFromCamera);
+    if (cosSurface <= 0.0f || pdfW <= 0.0f) {
+        return 0.0f;
+    }
+
+    return pdfW * cosSurface / dist2;
+}
+
+float VCM::pdfAreaFromVertexToDirection(const VCMPathVertex &from,
+                                        const Vector3f &wo,
+                                        const VCMPathVertex &to) const {
+    Vector3f edge = to.pos - from.pos;
+    float dist2 = edge.squaredLength();
+    if (dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    Vector3f dir = edge / std::sqrt(dist2);
+    if (from.type == VCMPathVertexType::Camera) {
+        return cameraAreaPdf(to, dir, dist2);
+    }
+    return pdfAreaFromDirection(from, wo, to, dir, dist2);
+}
+
+float VCM::pdfAreaFromVertexTo(const VCMPathVertex &from,
+                               const VCMPathVertex *prev,
+                               const VCMPathVertex &to) const {
+    Vector3f edge = to.pos - from.pos;
+    float dist2 = edge.squaredLength();
+    if (dist2 <= 1e-12f) {
+        return 0.0f;
+    }
+
+    Vector3f dir = edge / std::sqrt(dist2);
+    if (from.type == VCMPathVertexType::Camera) {
+        return cameraAreaPdf(to, dir, dist2);
+    }
+
+    Vector3f wo = from.wo;
+    if (prev != nullptr) {
+        Vector3f prevEdge = prev->pos - from.pos;
+        if (prevEdge.squaredLength() > 1e-12f) {
+            wo = prevEdge.normalized();
+        }
+    }
+
+    return pdfAreaFromDirection(from, wo, to, dir, dist2);
+}
+
+float VCM::vcmMisWeight(const std::vector<VCMPathVertex> &lightVertices,
+                        const std::vector<VCMPathVertex> &cameraVertices,
+                        int s,
+                        int t,
+                        float cameraPdfArea) const {
+    if (s + t == 2) {
+        return 1.0f;
+    }
+    if (s < 0 || t <= 0 ||
+        s > (int)lightVertices.size() ||
+        t > (int)cameraVertices.size()) {
+        return 0.0f;
+    }
+
+    std::vector<VCMPathVertex> light(lightVertices.begin(), lightVertices.begin() + s);
+    std::vector<VCMPathVertex> camera(cameraVertices.begin(), cameraVertices.begin() + t);
+
+    VCMPathVertex *qs = s > 0 ? &light[s - 1] : nullptr;
+    VCMPathVertex *pt = t > 0 ? &camera[t - 1] : nullptr;
+    VCMPathVertex *qsMinus = s > 1 ? &light[s - 2] : nullptr;
+    VCMPathVertex *ptMinus = t > 1 ? &camera[t - 2] : nullptr;
+
+    if (pt != nullptr) {
+        pt->isDelta = false;
+    }
+    if (qs != nullptr) {
+        qs->isDelta = false;
+    }
+
+    if (s == 0) {
+        if (pt == nullptr || !pt->isLight || ptMinus == nullptr) {
+            return 1.0f;
+        }
+
+        pt->pdfReverseArea = scene.lightAreaPdf();
+        ptMinus->pdfReverseArea = pdfAreaFromVertexTo(*pt, nullptr, *ptMinus);
+    } else if (t == 1) {
+        if (qs == nullptr || cameraPdfArea <= 0.0f) {
+            return 0.0f;
+        }
+
+        qs->pdfReverseArea = cameraPdfArea;
+        if (qsMinus != nullptr && pt != nullptr) {
+            qsMinus->pdfReverseArea = pdfAreaFromVertexTo(*qs, pt, *qsMinus);
+        }
+    } else {
+        if (qs == nullptr || pt == nullptr) {
+            return 0.0f;
+        }
+
+        pt->pdfReverseArea = pdfAreaFromVertexTo(*qs, qsMinus, *pt);
+        if (ptMinus != nullptr) {
+            ptMinus->pdfReverseArea = pdfAreaFromVertexTo(*pt, qs, *ptMinus);
+        }
+
+        qs->pdfReverseArea = pdfAreaFromVertexTo(*pt, ptMinus, *qs);
+        if (qsMinus != nullptr) {
+            qsMinus->pdfReverseArea = pdfAreaFromVertexTo(*qs, pt, *qsMinus);
+        }
+    }
+
+    float sumRi = 0.0f;
+    float ri = 1.0f;
+    for (int i = t - 1; i > 0; --i) {
+        ri *= remap0(camera[i].pdfReverseArea) / remap0(camera[i].pdfForwardArea);
+        if (!std::isfinite(ri)) {
+            return 0.0f;
+        }
+        if (!camera[i].isDelta && !camera[i - 1].isDelta) {
+            sumRi += ri;
+        }
+    }
+
+    ri = 1.0f;
+    for (int i = s - 1; i >= 0; --i) {
+        ri *= remap0(light[i].pdfReverseArea) / remap0(light[i].pdfForwardArea);
+        if (!std::isfinite(ri)) {
+            return 0.0f;
+        }
+
+        bool previousDelta = i > 0 && light[i - 1].isDelta;
+        if (!light[i].isDelta && !previousDelta) {
+            sumRi += ri;
+        }
+    }
+
+    if (!std::isfinite(sumRi) || sumRi < 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f / (1.0f + sumRi);
+}
+
+Vector3f VCM::connectLightToCamera(int s,
+                                   std::vector<FilmSplat> *splats,
+                                   float splatScale) {
+    if (splats == nullptr || s <= 1 || s > (int)lightPath.size() ||
+        splatScale <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    const VCMPathVertex &light = lightPath[s - 1];
+    if (light.material == nullptr || light.isDelta) {
+        return Vector3f::ZERO;
+    }
+
+    Vector2f raster;
+    Vector3f dirFromCamera;
+    float dist = 0.0f;
+    if (!scene.getCamera()->projectPoint(light.pos, raster, dirFromCamera, dist)) {
+        return Vector3f::ZERO;
+    }
+
+    float dist2 = dist * dist;
+    float pdfCameraArea = cameraAreaPdf(light, dirFromCamera, dist2);
+    if (pdfCameraArea <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    Ray visibilityRay(scene.getCamera()->getCenter(), dirFromCamera);
+    if (scene.getGroup()->occluded(visibilityRay, CONNECT_EPS, dist - CONNECT_EPS)) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f vertexToCamera = -dirFromCamera;
+    Vector3f contribution;
+    if (s == 1) {
+        contribution = light.throughput * pdfCameraArea;
+    } else {
+        Vector3f fLight = evaluateBSDF(
+            light.material,
+            light.normal,
+            light.wo,
+            vertexToCamera
+        );
+        if (fLight.squaredLength() <= 0.0f) {
+            return Vector3f::ZERO;
+        }
+        contribution = light.throughput * fLight * pdfCameraArea;
+    }
+
+    std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
+    std::vector<VCMPathVertex> cameraVertices(1, cameraPath[0]);
+    float w = vcmMisWeight(lightVertices, cameraVertices, s, 1, pdfCameraArea);
+    contribution = contribution * (w * splatScale);
+    if (contribution.squaredLength() <= 0.0f || !isFiniteColor(contribution)) {
+        return Vector3f::ZERO;
+    }
+
+    FilmSplat splat;
+    splat.x = static_cast<int>(std::floor(raster.x()));
+    splat.y = static_cast<int>(std::floor(raster.y()));
+    splat.contribution = contribution;
+    splats->push_back(splat);
+
+    return Vector3f::ZERO;
+}
+
+Vector3f VCM::connectVCM(int s,
+                         int t,
+                         std::vector<FilmSplat> *splats,
+                         float splatScale) {
+    if ((s == 0 && t == 1) || (s == 1 && t == 1)) {
+        return Vector3f::ZERO;
+    }
+    if (t < 1 || t > (int)cameraPath.size() ||
+        s < 0 || s > (int)lightPath.size()) {
+        return Vector3f::ZERO;
+    }
+
+    if (t == 1) {
+        return connectLightToCamera(s, splats, splatScale);
+    }
+
+    int ci = t - 1;
+    const VCMPathVertex &eye = cameraPath[ci];
+    bool includeLightTracingMis = splats != nullptr && splatScale > 0.0f;
+    if (eye.isLight) {
+        return s == 0
+            ? estimateCameraHitLight(ci, includeLightTracingMis)
+            : Vector3f::ZERO;
+    }
+
+    if (s == 0) {
+        return estimateCameraHitLight(ci, includeLightTracingMis);
+    }
+
+    if (s == 1) {
+        int surfaceDepth = t - 2;
+        int directSamples = surfaceDepth == 0
+            ? primaryDirectLightSamples
+            : secondaryDirectLightSamples;
+        return estimateDirectLight(eye, ci, directSamples);
+    }
+
+    int li = s - 1;
+    const VCMPathVertex &light = lightPath[li];
+
+    ConnectionGeometry connection;
+    if (!makeConnectionGeometry(eye, light, connection)) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f c = connectVertices(eye, light, connection);
+    if (c.squaredLength() <= 0.0f) {
+        return Vector3f::ZERO;
+    }
+
+    std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
+    std::vector<VCMPathVertex> cameraVertices(cameraPath.begin(), cameraPath.begin() + t);
+    float w = vcmMisWeight(lightVertices, cameraVertices, s, t);
+#if VCM_DEBUG_MIS
+    if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
+        std::cout << "bad mis weight: " << w << "\n";
+    }
+#endif
+
+    return c * w;
+}
+
 Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
-                                  int ci,
+                                  int cameraIndex,
                                   int numSamples) const {
     if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
@@ -369,51 +660,49 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
             continue;
         }
 
-        float cosEye = std::max(0.0f, Vector3f::dot(eye.normal, sample.dir));
-        float cosLight = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-        if (cosEye <= 0.0f || cosLight <= 0.0f) {
+        VCMPathVertex lightVertex;
+        lightVertex.pos = sample.pos;
+        lightVertex.normal = sample.normal;
+        lightVertex.throughput = sample.col / sample.pdf;
+        lightVertex.wo = -sample.dir;
+        lightVertex.pdfForwardArea = sample.pdf;
+        lightVertex.isDelta = false;
+        lightVertex.isLight = true;
+        lightVertex.type = VCMPathVertexType::Light;
+
+        ConnectionGeometry connection;
+        if (!makeConnectionGeometry(eye, lightVertex, connection)) {
             continue;
         }
 
-        Vector3f shadowOrigin = offsetRayOrigin(eye.pos, eye.normal, sample.dir);
-        Vector3f shadowEdge = sample.pos - shadowOrigin;
-        float shadowDist = shadowEdge.length();
-        if (shadowDist <= CONNECT_EPS) {
-            continue;
-        }
-        Ray shadowRay(shadowOrigin, shadowEdge / shadowDist);
-        if (scene.getGroup()->occluded(shadowRay, CONNECT_EPS, shadowDist - CONNECT_EPS)) {
+        Vector3f c = connectVertices(eye, lightVertex, connection);
+        if (c.squaredLength() <= 0.0f) {
             continue;
         }
 
-        Vector3f fEye = evaluateBSDF(eye.material, eye.normal, eye.wo, sample.dir);
-        if (fEye.squaredLength() <= 0.0f) {
-            continue;
-        }
+        std::vector<VCMPathVertex> lightVertices(1, lightVertex);
+        std::vector<VCMPathVertex> cameraVertices(
+            cameraPath.begin(),
+            cameraPath.begin() + cameraIndex + 1
+        );
+        float wLight = vcmMisWeight(lightVertices, cameraVertices, 1, cameraIndex + 1);
 
-        float pdfLightW = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosLight);
-        if (pdfLightW <= 0.0f) {
-            continue;
-        }
-
-        float pdfBsdfW = bsdfPdf(eye.material, eye.normal, eye.wo, sample.dir) *
-            rrContinueProbabilityAtDepth(eye.throughput, ci);
-        float wLight = powerHeuristic(pdfLightW, pdfBsdfW);
-
-        result += eye.throughput * sample.col * fEye * cosEye / pdfLightW * wLight;
+        result += c * wLight;
     }
 
     return result / static_cast<float>(numSamples);
 }
 
-Vector3f VCM::estimateCameraHitLight(int ci) const {
+Vector3f VCM::estimateCameraHitLight(int ci, bool includeLightTracingMis) const {
+    (void)includeLightTracingMis;
+
     const VCMPathVertex &light = cameraPath[ci];
-    if (light.material == nullptr || !light.isLight) {
+    if (ci <= 0 || light.material == nullptr || !light.isLight) {
         return Vector3f::ZERO;
     }
 
     Vector3f contribution = light.throughput * light.material->getEmission();
-    if (ci == 0) {
+    if (ci == 1) {
         return contribution;
     }
 
@@ -422,98 +711,23 @@ Vector3f VCM::estimateCameraHitLight(int ci) const {
         return contribution;
     }
 
-    Vector3f edge = light.pos - prev.pos;
-    float dist2 = edge.squaredLength();
-    if (dist2 <= 1e-12f) {
-        return Vector3f::ZERO;
-    }
+    std::vector<VCMPathVertex> lightVertices;
+    std::vector<VCMPathVertex> cameraVertices(
+        cameraPath.begin(),
+        cameraPath.begin() + ci + 1
+    );
 
-    Vector3f dir = edge / std::sqrt(dist2);
-    float pdfBsdfW = light.pdfForwardSolidAngle;
-    if (pdfBsdfW <= 0.0f) {
-        pdfBsdfW = bsdfPdf(prev.material, prev.normal, prev.wo, dir) *
-            rrContinueProbabilityAtDepth(prev.throughput, ci - 1);
-    }
-
-    float pdfLightW = scene.lightPdf(prev.pos, dir);
-    float wBsdf = powerHeuristic(pdfBsdfW, pdfLightW);
+    float wBsdf = vcmMisWeight(lightVertices, cameraVertices, 0, ci + 1);
     return contribution * wBsdf;
 }
 
-float VCM::vcmMisWeight(int ci,
-                        int li,
-                        const ConnectionGeometry &connection) const {
-    constexpr float EPS = 1e-8f;
-
-    const VCMPathVertex &eye = cameraPath[ci];
-    const VCMPathVertex &light = lightPath[li];
-
-    float sum = 1.0f;
-
-    float ratio = 1.0f;
-    if (li >= 0) {
-        float pdfEyeToLight = pdfAreaFromDirection(
-            eye,
-            eye.wo,
-            light,
-            connection.eyeToLight,
-            connection.dist2
-        );
-        float denom = std::max(light.pdfForwardArea, EPS);
-
-        ratio *= pdfEyeToLight / denom;
-        sum += ratio * ratio;
-
-        Vector3f incoming = connection.lightToEye;
-
-        for (int k = li - 1; k >= 1; --k) {
-            const VCMPathVertex &from = lightPath[k + 1];
-            const VCMPathVertex &to = lightPath[k];
-
-            float pdfRev = pdfAreaFromTo(from, incoming, to);
-            float pdfFwd = std::max(to.pdfForwardArea, EPS);
-
-            ratio *= pdfRev / pdfFwd;
-            sum += ratio * ratio;
-
-            incoming = (from.pos - to.pos).normalized();
-        }
-    }
-
-    ratio = 1.0f;
-    if (ci > 0) {
-        float pdfLightToEye = pdfAreaFromDirection(
-            light,
-            light.wo,
-            eye,
-            connection.lightToEye,
-            connection.dist2
-        );
-        float denom = std::max(eye.pdfForwardArea, EPS);
-
-        ratio *= pdfLightToEye / denom;
-        sum += ratio * ratio;
-
-        Vector3f incoming = connection.eyeToLight;
-
-        for (int k = ci - 1; k >= 1; --k) {
-            const VCMPathVertex &from = cameraPath[k + 1];
-            const VCMPathVertex &to = cameraPath[k];
-
-            float pdfRev = pdfAreaFromTo(from, incoming, to);
-            float pdfFwd = std::max(to.pdfForwardArea, EPS);
-
-            ratio *= pdfRev / pdfFwd;
-            sum += ratio * ratio;
-
-            incoming = (from.pos - to.pos).normalized();
-        }
-    }
-
-    return 1.0f / sum;
+Vector3f VCM::trace(const Ray &cameraRay) {
+    return trace(cameraRay, nullptr, 0.0f);
 }
 
-Vector3f VCM::trace(const Ray &cameraRay) {
+Vector3f VCM::trace(const Ray &cameraRay,
+                    std::vector<FilmSplat> *splats,
+                    float splatScale) {
     cameraPath.clear();
     lightPath.clear();
 
@@ -522,40 +736,9 @@ Vector3f VCM::trace(const Ray &cameraRay) {
 
     Vector3f L = Vector3f::ZERO;
 
-    for (int ci = 0; ci < (int)cameraPath.size(); ++ci) {
-        const auto &eye = cameraPath[ci];
-
-        if (eye.isLight) {
-            L += estimateCameraHitLight(ci);
-            continue;
-        }
-
-        int directSamples = ci == 0
-            ? primaryDirectLightSamples
-            : secondaryDirectLightSamples;
-        L += estimateDirectLight(eye, ci, directSamples);
-
-        for (int li = 1; li < (int)lightPath.size(); ++li) {
-            const auto &light = lightPath[li];
-
-            ConnectionGeometry connection;
-            if (!makeConnectionGeometry(eye, light, connection)) {
-                continue;
-            }
-
-            Vector3f c = connectVertices(eye, light, connection);
-            if (c.squaredLength() <= 0.0f) {
-                continue;
-            }
-
-            float w = vcmMisWeight(ci, li, connection);
-#if VCM_DEBUG_MIS
-            if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
-                std::cout << "bad mis weight: " << w << "\n";
-            }
-#endif
-
-            L += c * w;
+    for (int t = 1; t <= (int)cameraPath.size(); ++t) {
+        for (int s = 0; s <= (int)lightPath.size(); ++s) {
+            L += connectVCM(s, t, splats, splatScale);
         }
     }
 
