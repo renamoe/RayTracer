@@ -1,0 +1,36 @@
+PerspectiveCamera {
+    center 0.18 0.68 1.02
+    direction -0.20 -0.04 -1
+    up 0 1 0
+    angle 58
+    width 800
+    height 600
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 1
+    Material {
+        diffuseColor 0.82 0.82 0.80
+        specularColor 0.04 0.04 0.04
+        shininess 32
+    }
+}
+
+Group {
+    numObjects 1
+    MaterialIndex 0
+    Transform {
+        UniformScale 0.05
+        TriangleMesh {
+            obj_file mesh/salle_de_bain/salle_de_bain.obj
+        }
+    }
+}

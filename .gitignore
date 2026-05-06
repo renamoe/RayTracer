@@ -39,12 +39,14 @@ install_manifest.txt
 
 # Rendered output images (modify as needed)
 output/
-*.ppm
-*.bmp
-*.png
-*.jpg
-*.jpeg
-
+# *.ppm
+# *.bmp
+# *.png
+# *.jpg
+# *.jpeg
 
 # scenes/
 # mesh/
+
+# Large local scene assets
+mesh/salle_de_bain/
