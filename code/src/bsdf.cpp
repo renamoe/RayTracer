@@ -11,6 +11,22 @@ float clamp01(float x) {
     return std::max(0.0f, std::min(1.0f, x));
 }
 
+float maxComponent(const Vector3f &v) {
+    return std::max(v.x(), std::max(v.y(), v.z()));
+}
+
+float diffuseScaleFromSpecular(const Vector3f &specularColor) {
+    return 1.0f - std::min(maxComponent(specularColor), 0.95f);
+}
+
+float specularSamplingProbability(const Vector3f &specularColor) {
+    float specularStrength = maxComponent(specularColor);
+    if (specularStrength <= 1e-4f) {
+        return 0.0f;
+    }
+    return std::max(0.05f, std::min(specularStrength, 0.75f));
+}
+
 Vector3f fresnelSchlickColor(float cosTheta, const Vector3f &F0) {
     float f = std::pow(1.0f - clamp01(cosTheta), 5.0f);
     return F0 + (Vector3f(1, 1, 1) - F0) * f;
@@ -262,7 +278,19 @@ Vector3f evaluateBSDF(Material *mat,
             Vector3f::dot(normal, wi) <= 0.0f) {
             return Vector3f::ZERO;
         }
-        return diffuseColor / M_PI;
+
+        Vector3f specularColor = mat->getSpecularColor();
+        Vector3f result = diffuseColor * diffuseScaleFromSpecular(specularColor) / M_PI;
+        if (maxComponent(specularColor) > 1e-4f) {
+            result += evaluateCookTorranceGGX(
+                normal,
+                wo,
+                wi,
+                specularColor,
+                mat->getRoughness()
+            );
+        }
+        return result;
     }
 }
 
@@ -282,7 +310,10 @@ float bsdfPdf(Material *mat,
             Vector3f::dot(normal, wi) <= 0.0f) {
             return 0.0f;
         }
-        return diffusePdf(normal, wi);
+        float specProb = specularSamplingProbability(mat->getSpecularColor());
+        float diffuseProb = 1.0f - specProb;
+        return diffuseProb * diffusePdf(normal, wi) +
+               specProb * ggxPdf(normal, wo, wi, mat->getRoughness());
     }
 }
 
@@ -360,11 +391,24 @@ BSDFSample sampleBSDF(Material *mat,
         result.isDelta = true;
 
     } else {
-        Vector3f wi = cosineSampleHemisphere(normal);
+        float specProb = specularSamplingProbability(mat->getSpecularColor());
+        Vector3f wi = Vector3f::ZERO;
+        if (specProb > 0.0f && Random::get_float() < specProb) {
+            GlossySample glossy = sampleGGXDirection(normal, wo, mat->getRoughness());
+            wi = glossy.pdf > 0.0f ? glossy.dir : cosineSampleHemisphere(normal);
+        } else {
+            wi = cosineSampleHemisphere(normal);
+        }
+
         float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
-        float pdf = diffusePdf(normal, wi);
+        float pdf = bsdfPdf(mat, normal, wo, wi);
+        Vector3f f = evaluateBSDF(mat, diffuseColor, normal, wo, wi);
+        if (cosTheta <= 0.0f || pdf <= 0.0f || f.squaredLength() <= 0.0f) {
+            return result;
+        }
+
         result.wi = wi;
-        result.throughputWeight = diffuseColor * (cosTheta / (std::max(pdf, 1e-6f) * M_PI));
+        result.throughputWeight = f * cosTheta / std::max(pdf, 1e-6f);
         result.pdf = pdf;
         result.isDelta = false;
     }

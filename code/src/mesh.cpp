@@ -1,11 +1,15 @@
 #include "mesh.hpp"
 #include "triangle.hpp"
 #include "texture.hpp"
-#include <iostream>
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <iostream>
 #include <numeric>
 #include <string>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 namespace {
 
@@ -24,6 +28,31 @@ std::string directoryOf(const std::string &filename) {
         return "";
     }
     return filename.substr(0, pos + 1);
+}
+
+float roughnessFromNs(float ns) {
+    ns = std::max(ns, 1.0f);
+    return std::clamp(std::sqrt(2.0f / (ns + 2.0f)), 0.0015f, 1.0f);
+}
+
+MaterialType typeFromMtl(const tinyobj::material_t &m) {
+    Vector3f Ke(m.emission[0], m.emission[1], m.emission[2]);
+    Vector3f Ks(m.specular[0], m.specular[1], m.specular[2]);
+    Vector3f Kd(m.diffuse[0], m.diffuse[1], m.diffuse[2]);
+
+    if (Ke.squaredLength() > 0.0f) return MaterialType::EMISSIVE;
+
+    bool transparent = m.dissolve < 0.999f ||
+        Vector3f(m.transmittance[0], m.transmittance[1], m.transmittance[2]).squaredLength() > 0.0f;
+    if (transparent || m.illum == 4 || m.illum == 6 || m.illum == 7 || m.illum == 9) {
+        return MaterialType::GLASS;
+    }
+
+    bool mirrorLike = m.illum == 3 ||
+        (Ks.x() > 0.7f && Ks.y() > 0.7f && Ks.z() > 0.7f && Kd.length() < 0.05f);
+    if (mirrorLike) return MaterialType::MIRROR;
+
+    return MaterialType::DIFFUSE;
 }
 
 } // namespace
@@ -97,9 +126,6 @@ bool Mesh::getBoundingBox(AABB &box) const {
     return true;
 }
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
-
 Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
     std::string objFilename = normalizeTexturePath(filename);
     std::string baseDir = directoryOf(objFilename);
@@ -126,12 +152,20 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
 
     // Parse MTL materials
     for (const auto& m : materials) {
+        MaterialType type = typeFromMtl(m);
+        float roughness = roughnessFromNs(m.shininess);
+
         auto *mat = new Material(
             Vector3f(m.diffuse[0], m.diffuse[1], m.diffuse[2]),
             Vector3f(m.specular[0], m.specular[1], m.specular[2]),
             Vector3f(m.emission[0], m.emission[1], m.emission[2]),
-            m.shininess
+            m.shininess,
+            type,
+            Vector3f(1, 1, 1),
+            m.ior > 0.0f ? m.ior : 1.5f,
+            roughness
         );
+
         if (!m.diffuse_texname.empty()) {
             mat->setDiffuseTexture(Texture::load(resolveRelativePath(objFilename, m.diffuse_texname)));
         }

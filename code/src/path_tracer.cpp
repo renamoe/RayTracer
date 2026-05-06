@@ -158,19 +158,26 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         }
     }
 
+    Vector3f shadingNormal = normal;
+    if (Vector3f::dot(ray.getDirection(), shadingNormal) > 0.0f) {
+        shadingNormal = -shadingNormal;
+    }
+    Vector3f wo = (-ray.getDirection()).normalized();
     Vector3f albedo = material->getDiffuseColor(hit);
     Light::SampleResult sample = scene.sampleLight(pos);
     Vector3f direct = Vector3f::ZERO;
     if (sample.pdf > 0.0f && sample.dist > 0.0f) {
-        Vector3f shadowOrigin = pos + normal * 1e-6;
+        Vector3f shadowOffsetNormal = Vector3f::dot(sample.dir, normal) > 0.0f ? normal : -normal;
+        Vector3f shadowOrigin = pos + shadowOffsetNormal * 1e-6;
         Ray shadowRay(shadowOrigin, sample.dir);
         if (!scene.getGroup()->occluded(shadowRay, 1e-6f, sample.dist - 1e-4f)) {
-            float cosThetaX = std::max(0.0f, Vector3f::dot(normal, sample.dir));
+            Vector3f lightDir = sample.dir.normalized();
+            float cosThetaX = std::max(0.0f, Vector3f::dot(shadingNormal, lightDir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
-            Vector3f f_r = albedo / M_PI;
+            Vector3f f_r = evaluateBSDF(material, albedo, shadingNormal, wo, lightDir);
             float pdfLight = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosThetaY);
-            float pdfBrdf = diffusePdf(normal, sample.dir);
-            if (pdfLight > 0.0f) {
+            float pdfBrdf = bsdfPdf(material, shadingNormal, wo, lightDir);
+            if (pdfLight > 0.0f && f_r.squaredLength() > 0.0f) {
                 float wLight = powerHeuristic(pdfLight, pdfBrdf);
                 direct = sample.col * f_r * cosThetaX / pdfLight * wLight;
             }
@@ -181,20 +188,13 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         return emission + direct;
     }
 
-    Vector3f T, B;
-    if (std::abs(normal.x()) > 0.9f) {
-        T = Vector3f::cross(Vector3f(0, 1, 0), normal).normalized();
-    } else {
-        T = Vector3f::cross(Vector3f(1, 0, 0), normal).normalized();
+    BSDFSample bsdfSample = sampleBSDF(material, albedo, shadingNormal, wo);
+    if (bsdfSample.pdf <= 0.0f || bsdfSample.throughputWeight.squaredLength() <= 0.0f) {
+        return emission + direct;
     }
-    B = Vector3f::cross(normal, T).normalized();
-    float r1 = 2 * M_PI * Random::get_float();
-    float r2 = Random::get_float();
-    float r2s = std::sqrt(r2);
-    Vector3f wi = (T * std::cos(r1) * r2s +
-                   B * std::sin(r1) * r2s +
-                   normal * std::sqrt(1 - r2)).normalized();
-    Ray nextRay(pos + normal * 1e-6, wi);
+
+    Vector3f offsetNormal = Vector3f::dot(bsdfSample.wi, normal) > 0.0f ? normal : -normal;
+    Ray nextRay(pos + offsetNormal * 1e-6, bsdfSample.wi);
 
     Hit nextHit;
     bool nextIntersects = scene.getGroup()->intersect(nextRay, nextHit, 1e-6f);
@@ -202,13 +202,9 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
     bool hitLight = nextIntersects && nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
     Vector3f brdfLight = Vector3f::ZERO;
     if (hitLight) {
-        float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
-        float pdfBrdf = diffusePdf(normal, wi);
-        float pdfLight = scene.lightPdfFromHit(nextHit, wi);
-        float wBrdf = powerHeuristic(pdfBrdf, pdfLight);
-
-        Vector3f f_r = albedo / M_PI;
-        brdfLight = nextHit.getMaterial()->getEmission() * f_r * cosTheta / std::max(pdfBrdf, 1e-6f) * wBrdf / P_RR;
+        float pdfLight = scene.lightPdfFromHit(nextHit, bsdfSample.wi);
+        float wBrdf = powerHeuristic(bsdfSample.pdf, pdfLight);
+        brdfLight = nextHit.getMaterial()->getEmission() * bsdfSample.throughputWeight * wBrdf / P_RR;
     }
 
     Vector3f indirect = Vector3f::ZERO;
@@ -216,7 +212,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Vector3f incoming = nextIntersects
             ? traceFromHit(nextRay, nextHit, depth + 1)
             : scene.getBackgroundColor();
-        indirect = incoming * albedo / P_RR;
+        indirect = incoming * bsdfSample.throughputWeight / P_RR;
     }
 
     Vector3f result = emission + direct + brdfLight + indirect;
