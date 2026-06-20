@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 #ifndef VCM_DEBUG_MIS
 #define VCM_DEBUG_MIS 0
@@ -152,7 +153,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         v.pos = pos;
         v.normal = normal;
         v.throughput = beta;
-        v.wi = -ray.getDirection();
+        v.wo = -ray.getDirection();
         v.diffuseColor = mat->getDiffuseColor(hit);
         v.material = mat;
         v.isDelta = mat->isDelta();
@@ -194,7 +195,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         }
 
         VCMPathVertex &curr = lightPhotons.back();
-        curr.wo = sample.wi;
+        curr.wi = sample.wi;
         if (lightPhotons.size() >= 2) {
             VCMPathVertex &prev = lightPhotons[lightPhotons.size() - 2];
             prev.pdfReverseArea =
@@ -220,7 +221,7 @@ Vector3f VCM::gatherPhotons(const VCMPathVertex &v,
     Vector3f sum = Vector3f::ZERO;
 
     photonHashGrid.query(v.pos, [&](size_t idx, const VCMPathVertex &photon) {
-        Vector3f wi = photon.wi;
+        Vector3f wi = photon.wo;
 
         if (Vector3f::dot(v.normal, wi) <= 0.0f) {
             return;
@@ -241,7 +242,9 @@ Vector3f VCM::gatherPhotons(const VCMPathVertex &v,
 
 Vector3f VCM::generateCameraPath(const Ray &cameraRay,
                                  std::vector<VCMPathVertex> &path,
-                                 int maxDepth) {
+                                 int maxDepth,
+                                 bool includeHitLight,
+                                 bool includeMerging) {
     path.clear();
 
     Camera *camera = scene.getCamera();
@@ -311,11 +314,14 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
         path.push_back(v);
 
         if (mat->isEmissive()) {
+            if (!includeHitLight) {
+                break;
+            }
             L += beta * mat->getEmission();
             break;
         }
 
-        if (!mat->isDelta()) {
+        if (includeMerging && !mat->isDelta()) {
             L += gatherPhotons(v, beta);
         }
 
@@ -585,7 +591,10 @@ float VCM::vcmMisWeight(const std::vector<VCMPathVertex> &lightVertices,
 
 Vector3f VCM::connectLightToCamera(int s,
                                    std::vector<FilmSplat> *splats,
-                                   float splatScale) {
+                                   float splatScale,
+                                   const std::vector<VCMPathVertex> &lightPath,
+                                   const std::vector<VCMPathVertex> &cameraPath,
+                                   bool useMis) {
     if (splats == nullptr || s <= 1 || s > (int)lightPath.size() ||
         splatScale <= 0.0f) {
         return Vector3f::ZERO;
@@ -634,7 +643,7 @@ Vector3f VCM::connectLightToCamera(int s,
 
     std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
     std::vector<VCMPathVertex> cameraVertices(1, cameraPath[0]);
-    float w = vcmMisWeight(lightVertices, cameraVertices, s, 1, pdfCameraArea);
+    float w = useMis ? vcmMisWeight(lightVertices, cameraVertices, s, 1, pdfCameraArea) : 1.0f;
     contribution = contribution * (w * splatScale);
     if (contribution.squaredLength() <= 0.0f || !isFiniteColor(contribution)) {
         return Vector3f::ZERO;
@@ -652,7 +661,10 @@ Vector3f VCM::connectLightToCamera(int s,
 Vector3f VCM::connectVCM(int s,
                          int t,
                          std::vector<FilmSplat> *splats,
-                         float splatScale) {
+                         float splatScale,
+                         const std::vector<VCMPathVertex> &cameraPath,
+                         const std::vector<VCMPathVertex> &lightPath,
+                         bool useMis) {
     if ((s == 0 && t == 1) || (s == 1 && t == 1)) {
         return Vector3f::ZERO;
     }
@@ -662,7 +674,7 @@ Vector3f VCM::connectVCM(int s,
     }
 
     if (t == 1) {
-        return connectLightToCamera(s, splats, splatScale);
+        return connectLightToCamera(s, splats, splatScale, lightPath, cameraPath, useMis);
     }
 
     int ci = t - 1;
@@ -670,12 +682,12 @@ Vector3f VCM::connectVCM(int s,
     bool includeLightTracingMis = splats != nullptr && splatScale > 0.0f;
     if (eye.isLight) {
         return s == 0
-            ? estimateCameraHitLight(ci, includeLightTracingMis)
+            ? estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useMis)
             : Vector3f::ZERO;
     }
 
     if (s == 0) {
-        return estimateCameraHitLight(ci, includeLightTracingMis);
+        return estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useMis);
     }
 
     if (s == 1) {
@@ -683,7 +695,7 @@ Vector3f VCM::connectVCM(int s,
         int directSamples = surfaceDepth == 0
             ? primaryDirectLightSamples
             : secondaryDirectLightSamples;
-        return estimateDirectLight(eye, ci, directSamples);
+        return estimateDirectLight(eye, ci, directSamples, cameraPath, lightPath, useMis);
     }
 
     int li = s - 1;
@@ -701,7 +713,7 @@ Vector3f VCM::connectVCM(int s,
 
     std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
     std::vector<VCMPathVertex> cameraVertices(cameraPath.begin(), cameraPath.begin() + t);
-    float w = vcmMisWeight(lightVertices, cameraVertices, s, t);
+    float w = useMis ? vcmMisWeight(lightVertices, cameraVertices, s, t) : 1.0f;
 #if VCM_DEBUG_MIS
     if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
         std::cout << "bad mis weight: " << w << "\n";
@@ -713,7 +725,10 @@ Vector3f VCM::connectVCM(int s,
 
 Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
                                   int cameraIndex,
-                                  int numSamples) const {
+                                  int numSamples,
+                                  const std::vector<VCMPathVertex> &cameraPath,
+                                  const std::vector<VCMPathVertex> &lightPath,
+                                  bool useMis) const {
     if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
@@ -750,7 +765,9 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
             cameraPath.begin(),
             cameraPath.begin() + cameraIndex + 1
         );
-        float wLight = vcmMisWeight(lightVertices, cameraVertices, 1, cameraIndex + 1);
+        float wLight = useMis
+            ? vcmMisWeight(lightVertices, cameraVertices, 1, cameraIndex + 1)
+            : 1.0f;
 
         result += c * wLight;
     }
@@ -758,7 +775,11 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
     return result / static_cast<float>(numSamples);
 }
 
-Vector3f VCM::estimateCameraHitLight(int ci, bool includeLightTracingMis) const {
+Vector3f VCM::estimateCameraHitLight(int ci, 
+                                     bool includeLightTracingMis,
+                                     const std::vector<VCMPathVertex> &cameraPath,
+                                     const std::vector<VCMPathVertex> &lightPath,
+                                     bool useMis) const {
     (void)includeLightTracingMis;
 
     const VCMPathVertex &light = cameraPath[ci];
@@ -782,7 +803,7 @@ Vector3f VCM::estimateCameraHitLight(int ci, bool includeLightTracingMis) const 
         cameraPath.begin() + ci + 1
     );
 
-    float wBsdf = vcmMisWeight(lightVertices, cameraVertices, 0, ci + 1);
+    float wBsdf = useMis ? vcmMisWeight(lightVertices, cameraVertices, 0, ci + 1) : 1.0f;
     return contribution * wBsdf;
 }
 
@@ -794,18 +815,83 @@ Vector3f VCM::trace(size_t pathIdx,
                     const Ray &cameraRay,
                     std::vector<FilmSplat> *splats,
                     float splatScale) {
-    Vector3f pmResult = generateCameraPath(cameraRay, cameraPath, MAX_VCM_CAMERA_PATH_DEPTH);
-    // return pmResult; // pm debug mode
+    return traceVCMNoMIS(pathIdx, cameraRay, splats, splatScale);
+}
 
-    lightPath.assign(lightPhotons.begin() + pathHeads[pathIdx], lightPhotons.begin() + pathHeads[pathIdx + 1]);
+Vector3f VCM::traceVMOnly(size_t pathIdx, const Ray &cameraRay) {
+    (void)pathIdx;
+
+    std::vector<VCMPathVertex> cameraPath;
+    Vector3f L = generateCameraPath(
+        cameraRay,
+        cameraPath,
+        MAX_VCM_CAMERA_PATH_DEPTH,
+        true,
+        true
+    );
+    return isFiniteColor(L) ? L : Vector3f::ZERO;
+}
+
+Vector3f VCM::traceVCOnly(size_t pathIdx,
+                          const Ray &cameraRay,
+                          std::vector<FilmSplat> *splats,
+                          float splatScale) {
+    if (pathIdx + 1 >= pathHeads.size()) {
+        return Vector3f::ZERO;
+    }
+
+    std::vector<VCMPathVertex> cameraPath;
+    std::vector<VCMPathVertex> lightPath(
+        lightPhotons.begin() + pathHeads[pathIdx],
+        lightPhotons.begin() + pathHeads[pathIdx + 1]
+    );
+
+    generateCameraPath(
+        cameraRay,
+        cameraPath,
+        MAX_VCM_CAMERA_PATH_DEPTH,
+        false,
+        false
+    );
 
     Vector3f L = Vector3f::ZERO;
 
     for (int t = 1; t <= (int)cameraPath.size(); ++t) {
         for (int s = 0; s <= (int)lightPath.size(); ++s) {
-            L += connectVCM(s, t, splats, splatScale);
+            L += connectVCM(s, t, splats, splatScale, cameraPath, lightPath, true);
         }
     }
 
-    return L;
+    return isFiniteColor(L) ? L : Vector3f::ZERO;
+}
+
+Vector3f VCM::traceVCMNoMIS(size_t pathIdx,
+                            const Ray &cameraRay,
+                            std::vector<FilmSplat> *splats,
+                            float splatScale) {
+    if (pathIdx + 1 >= pathHeads.size()) {
+        return Vector3f::ZERO;
+    }
+
+    std::vector<VCMPathVertex> cameraPath;
+    std::vector<VCMPathVertex> lightPath(
+        lightPhotons.begin() + pathHeads[pathIdx],
+        lightPhotons.begin() + pathHeads[pathIdx + 1]
+    );
+
+    Vector3f L = generateCameraPath(
+        cameraRay,
+        cameraPath,
+        MAX_VCM_CAMERA_PATH_DEPTH,
+        false,
+        true
+    );
+
+    for (int t = 1; t <= (int)cameraPath.size(); ++t) {
+        for (int s = 0; s <= (int)lightPath.size(); ++s) {
+            L += connectVCM(s, t, splats, splatScale, cameraPath, lightPath, false);
+        }
+    }
+
+    return isFiniteColor(L) ? L : Vector3f::ZERO;
 }

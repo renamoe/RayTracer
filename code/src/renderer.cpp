@@ -189,9 +189,13 @@ Image Renderer::renderVCM() {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
-                
+
                 size_t pathIdx = static_cast<size_t>(y) * width + x;
-                Vector3f color = vcm.trace(pathIdx, ray);
+                // Vector3f color = vcm.traceVMOnly(pathIdx, ray);
+                // Vector3f color = vcm.traceVCOnly(pathIdx, ray);
+                Vector3f color = vcm.traceVCMNoMIS(pathIdx, ray);
+                // Vector3f color = vcm.trace(pathIdx, ray);
+
 
                 size_t index = static_cast<size_t>(y) * width + x;
                 accumulated[index] += color;

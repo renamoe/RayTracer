@@ -34,6 +34,15 @@ public:
                    const Ray &cameraRay,
                    std::vector<FilmSplat> *splats,
                    float splatScale);
+    Vector3f traceVMOnly(size_t pathIdx, const Ray &cameraRay);
+    Vector3f traceVCOnly(size_t pathIdx,
+                         const Ray &cameraRay,
+                         std::vector<FilmSplat> *splats = nullptr,
+                         float splatScale = 0.0f);
+    Vector3f traceVCMNoMIS(size_t pathIdx,
+                           const Ray &cameraRay,
+                           std::vector<FilmSplat> *splats = nullptr,
+                           float splatScale = 0.0f);
 
 private:
     struct ConnectionGeometry {
@@ -52,7 +61,9 @@ private:
 
     Vector3f generateCameraPath(const Ray &cameraRay,
                      std::vector<VCMPathVertex> &cameraPath, 
-                     int maxDepth);
+                     int maxDepth,
+                     bool includeHitLight,
+                     bool includeMerging);
 
     bool makeConnectionGeometry(const VCMPathVertex &eye,
                                 const VCMPathVertex &light,
@@ -65,15 +76,30 @@ private:
     Vector3f connectVCM(int s,
                         int t,
                         std::vector<FilmSplat> *splats,
-                        float splatScale);
+                        float splatScale,
+                        const std::vector<VCMPathVertex> &cameraPath,
+                        const std::vector<VCMPathVertex> &lightPath,
+                        bool useMis = true);
 
     Vector3f connectLightToCamera(int s,
                                   std::vector<FilmSplat> *splats,
-                                  float splatScale);
+                                  float splatScale,
+                                  const std::vector<VCMPathVertex> &lightPath,
+                                  const std::vector<VCMPathVertex> &cameraPath,
+                                  bool useMis = true);
 
-    Vector3f estimateDirectLight(const VCMPathVertex &eye, int cameraIndex, int numSamples) const;
+    Vector3f estimateDirectLight(const VCMPathVertex &eye, 
+                                int cameraIndex, 
+                                int numSamples,
+                                const std::vector<VCMPathVertex> &cameraPath,
+                                const std::vector<VCMPathVertex> &lightPath,
+                                bool useMis = true) const;
 
-    Vector3f estimateCameraHitLight(int ci, bool includeLightTracingMis) const;
+    Vector3f estimateCameraHitLight(int ci, 
+                                    bool includeLightTracingMis,
+                                    const std::vector<VCMPathVertex> &cameraPath,
+                                    const std::vector<VCMPathVertex> &lightPath,
+                                    bool useMis = true) const;
 
     float cameraAreaPdf(const VCMPathVertex &vertex,
                         const Vector3f &dirFromCamera,
@@ -96,8 +122,6 @@ private:
     SceneParser &scene;
     int primaryDirectLightSamples;
     int secondaryDirectLightSamples;
-    std::vector<VCMPathVertex> cameraPath;
-    std::vector<VCMPathVertex> lightPath;
 
     int lightPathCount;
     float baseRadius;
