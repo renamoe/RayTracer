@@ -3,13 +3,28 @@
 #include "Vector3f.h"
 #include "material.hpp"
 
-struct PhotonVertex {
+enum class VCMPathVertexType {
+    Camera,
+    Light,
+    Surface
+};
+
+struct VCMPathVertex {
     Vector3f pos;
     Vector3f normal;
     Vector3f throughput;
     Vector3f diffuseColor = Vector3f(1, 1, 1);
+
     Material *material = nullptr;
+
+    Vector3f wo;
     Vector3f wi;
-    int depth = 0;
+
+    float pdfForwardArea = 0.0f;
+    float pdfReverseArea = 0.0f;
+    float pdfForwardSolidAngle = 0.0f;
+
     bool isDelta = false;
+    bool isLight = false;
+    VCMPathVertexType type = VCMPathVertexType::Surface;
 };

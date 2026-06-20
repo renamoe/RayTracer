@@ -36,7 +36,7 @@ public:
     HashGrid() = default;
     ~HashGrid() = default;
 
-    void build(float radius, const std::vector<PhotonVertex> &vertices);
+    void build(float radius, const std::vector<VCMPathVertex> &vertices);
 
     template<class Callback>
     void query(const Vector3f &p, Callback &&callback) const {
@@ -50,7 +50,7 @@ public:
                         continue;
                     }
                     for (size_t i : it->second) {
-                        const PhotonVertex &v = (*vertices)[i];
+                        const VCMPathVertex &v = (*vertices)[i];
                         float dist2 = (v.pos - p).squaredLength();
                         if (dist2 < radius2) {
                             callback(i, v);
@@ -63,11 +63,11 @@ public:
 
 private:
     Int3 cellOf(const Vector3f &p) const;
-    bool isMergeable(const PhotonVertex &p) const;
+    bool isMergeable(const VCMPathVertex &p) const;
 
     float radius2;
     float cellSize;
     float invCellSize;
-    const std::vector<PhotonVertex> *vertices = nullptr;
+    const std::vector<VCMPathVertex> *vertices = nullptr;
     std::unordered_map<Int3, std::vector<size_t>, Int3Hash> buckets;
 };

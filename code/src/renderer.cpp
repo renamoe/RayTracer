@@ -11,6 +11,7 @@
 #include "vcm.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -188,8 +189,9 @@ Image Renderer::renderVCM() {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
-
-                Vector3f color = vcm.trace(ray);
+                
+                size_t pathIdx = static_cast<size_t>(y) * width + x;
+                Vector3f color = vcm.trace(pathIdx, ray);
 
                 size_t index = static_cast<size_t>(y) * width + x;
                 accumulated[index] += color;

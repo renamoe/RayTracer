@@ -1,18 +1,19 @@
 #include "hash_grid.hpp"
+#include "path_vertex.hpp"
 
 #include <cmath>
 
-void HashGrid::build(float radius, const std::vector<PhotonVertex> &photons) {
+void HashGrid::build(float radius, const std::vector<VCMPathVertex> &lightPhotons) {
     radius2 = radius * radius;
     cellSize = radius;
     invCellSize = 1.0f / radius;
 
-    vertices = &photons;
+    vertices = &lightPhotons;
     buckets.clear();
-    buckets.reserve(photons.size() * 2);
+    buckets.reserve(lightPhotons.size() * 2);
 
-    for (size_t i = 0; i < photons.size(); ++i) {
-        const PhotonVertex &v = photons[i];
+    for (size_t i = 0; i < lightPhotons.size(); ++i) {
+        const VCMPathVertex &v = lightPhotons[i];
         if (!isMergeable(v)) {
             continue;
         }
@@ -29,7 +30,7 @@ Int3 HashGrid::cellOf(const Vector3f &p) const {
     return {x, y, z};
 }
 
-bool HashGrid::isMergeable(const PhotonVertex &p) const {
-    return !p.isDelta;
+bool HashGrid::isMergeable(const VCMPathVertex &p) const {
+    return !p.isDelta && !p.isLight;
 }
 

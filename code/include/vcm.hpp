@@ -7,36 +7,11 @@
 #include "scene_parser.hpp"
 #include "path_vertex.hpp"
 
+#include <cstddef>
 #include <vector>
 
 constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 5;
 constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 3;
-
-enum class VCMPathVertexType {
-    Camera,
-    Light,
-    Surface
-};
-
-struct VCMPathVertex {
-    Vector3f pos;
-    Vector3f normal;
-    Vector3f throughput;
-    Vector3f diffuseColor = Vector3f(1, 1, 1);
-
-    Material *material = nullptr;
-
-    Vector3f wo;
-    Vector3f wi;
-
-    float pdfForwardArea = 0.0f;
-    float pdfReverseArea = 0.0f;
-    float pdfForwardSolidAngle = 0.0f;
-
-    bool isDelta = false;
-    bool isLight = false;
-    VCMPathVertexType type = VCMPathVertexType::Surface;
-};
 
 
 class VCM {
@@ -54,8 +29,9 @@ public:
 
     void beginIteration(int iteration, int width, int height);
 
-    Vector3f trace(const Ray &cameraRay);
-    Vector3f trace(const Ray &cameraRay,
+    Vector3f trace(size_t pathIdx, const Ray &cameraRay);
+    Vector3f trace(size_t pathIdx, 
+                   const Ray &cameraRay,
                    std::vector<FilmSplat> *splats,
                    float splatScale);
 
@@ -69,22 +45,14 @@ private:
         float cosThetaLight = 0.0f;
     };
 
-    void generatePhotonPath(int maxDepth);
+    void generateLightPath(size_t pathIdx, int maxDepth);
 
-    Vector3f gatherPhotons(const Vector3f &pos,
-                           const Vector3f &normal,
-                           const Vector3f &wo,
-                           Material *mat,
-                           const Vector3f &diffuseColor,
+    Vector3f gatherPhotons(const VCMPathVertex &v,
                            const Vector3f &cameraThroughput) const;
 
-    Vector3f tracePM(const Ray &cameraRay);
-
-    int generateCameraPath(const Ray &cameraRay,
-                           std::vector<VCMPathVertex> &path,
-                           int maxDepth);
-
-    int generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth);
+    Vector3f generateCameraPath(const Ray &cameraRay,
+                     std::vector<VCMPathVertex> &cameraPath, 
+                     int maxDepth);
 
     bool makeConnectionGeometry(const VCMPathVertex &eye,
                                 const VCMPathVertex &light,
@@ -134,6 +102,7 @@ private:
     int lightPathCount;
     float baseRadius;
     float pmRadius;
-    std::vector<PhotonVertex> lightPhotons;
+    std::vector<VCMPathVertex> lightPhotons;
     HashGrid photonHashGrid;
+    std::vector<size_t> pathHeads;
 };
