@@ -1,3 +1,4 @@
+#include "Vector3f.h"
 #include "vcm.hpp"
 #include "bsdf.hpp"
 #include "camera.hpp"
@@ -23,6 +24,7 @@ constexpr float MAX_CONNECTION_GEOMETRY_TERM = 1e4f;
 constexpr int RR_START_DEPTH = 2;
 constexpr float RR_MIN_CONTINUE = 0.05f;
 constexpr float RR_MAX_CONTINUE = 0.95f;
+constexpr float ALPHA = 0.7f;
 
 float rrContinueProbability(const Vector3f &beta) {
     float maxComp = std::max(beta.x(), std::max(beta.y(), beta.z()));
@@ -67,15 +69,204 @@ float pdfAreaFromDirection(const VCMPathVertex &from,
 
 VCM::VCM(SceneParser &scene,
          int primaryDirectLightSamples,
-         int secondaryDirectLightSamples)
+         int secondaryDirectLightSamples,
+         float baseRadius)
     : scene(scene),
       primaryDirectLightSamples(std::max(0, primaryDirectLightSamples)),
-      secondaryDirectLightSamples(std::max(0, secondaryDirectLightSamples)) {}
+      secondaryDirectLightSamples(std::max(0, secondaryDirectLightSamples)),
+      baseRadius(baseRadius) {
+}
 
 void VCM::beginIteration(int iteration, int width, int height) {
-    (void)iteration;
-    (void)width;
-    (void)height;
+    // pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
+    pmRadius = baseRadius;
+    lightPathCount = width * height;
+
+    lightPhotons.clear();
+    lightPhotons.reserve(lightPathCount * 3);
+
+    for (int i = 0; i < lightPathCount; ++i) {
+        generatePhotonPath(MAX_VCM_LIGHT_PATH_DEPTH);
+    }
+    photonHashGrid.build(pmRadius, lightPhotons);
+}
+
+void VCM::generatePhotonPath(int maxDepth) {
+    LightEmitSample emit = scene.sampleEmitLight();
+    if (emit.pdfPos <= 0.0f || emit.pdfDir <= 0.0f ||
+        emit.material == nullptr || emit.emission.squaredLength() <= 0.0f) {
+        return;
+    }
+
+    float cosEmit = Vector3f::dot(emit.normal, emit.dir);
+    if (cosEmit <= 0.0f) {
+        return;
+    }
+
+    Vector3f beta = emit.emission * cosEmit / (emit.pdfPos * emit.pdfDir);
+
+    Ray ray(emit.pos + emit.normal * CONNECT_EPS, emit.dir);
+
+    for (int depth = 1; depth < maxDepth; ++depth) {
+        Hit hit;
+        if (!scene.getGroup()->intersect(ray, hit, CONNECT_EPS)) {
+            break;
+        }
+
+        Material *mat = hit.getMaterial();
+        if (mat == nullptr) {
+            break;
+        }
+
+        Vector3f pos = ray.pointAtParameter(hit.getT());
+        Vector3f geometryNormal = hit.getNormal();
+        Vector3f normal = geometryNormal;
+        if (Vector3f::dot(normal, ray.getDirection()) > 0.0f) {
+            normal = -normal;
+        }
+
+        if (!mat->isDelta() && !mat->isEmissive()) {
+            PhotonVertex v;
+            v.pos = pos;
+            v.normal = normal;
+            v.throughput = beta;
+            v.wi = -ray.getDirection();
+            v.depth = depth;
+            v.diffuseColor = mat->getDiffuseColor(hit);
+            v.material = mat;
+            v.isDelta = false;
+            lightPhotons.push_back(v);
+        }
+
+        if (mat->isEmissive()) {
+            break;
+        }
+
+        if (depth + 1 >= maxDepth) {
+            break;
+        }
+
+        float rrProb = 1.0f;
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
+
+        Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
+        BSDFSample sample = sampleBSDF(mat, mat->getDiffuseColor(hit), bsdfNormal, -ray.getDirection());
+        if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
+            break;
+        }
+
+        beta = beta * sample.throughputWeight;
+
+        Vector3f offsetNormal = Vector3f::dot(sample.wi, geometryNormal) > 0.0f
+            ? geometryNormal
+            : -geometryNormal;
+        ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
+    }
+}
+
+Vector3f VCM::gatherPhotons(const Vector3f &pos,
+                          const Vector3f &normal,
+                          const Vector3f &wo,
+                          Material *mat,
+                          const Vector3f &diffuseColor,
+                          const Vector3f &cameraThroughput) const {
+    if (mat == nullptr || mat->isDelta() || mat->isEmissive()) {
+        return Vector3f::ZERO;
+    }
+
+    Vector3f sum = Vector3f::ZERO;
+
+    photonHashGrid.query(pos, [&](size_t idx, const PhotonVertex &photon) {
+        Vector3f wi = photon.wi;
+
+        if (Vector3f::dot(normal, wi) <= 0.0f) {
+            return;
+        }
+
+        Vector3f f = evaluateBSDF(mat, diffuseColor, normal, wo, wi);
+        if (f.squaredLength() <= 0.0f) {
+            return;
+        }
+
+        sum += photon.throughput * f;
+    });
+
+    float normalization = 1.0f / (M_PI * pmRadius * pmRadius * lightPathCount);
+
+    return cameraThroughput * sum * normalization;
+}
+
+Vector3f VCM::tracePM(const Ray &cameraRay) {
+    Vector3f L = Vector3f::ZERO;
+    Vector3f beta(1, 1, 1);
+    Ray ray = cameraRay;
+
+    for (int depth = 0; depth < MAX_VCM_CAMERA_PATH_DEPTH; ++depth) {
+        Hit hit;
+        if (!scene.getGroup()->intersect(ray, hit, 1e-6f)) {
+            break;
+        }
+
+        Material *mat = hit.getMaterial();
+        if (mat == nullptr) {
+            break;
+        }
+
+        Vector3f pos = ray.pointAtParameter(hit.getT());
+        Vector3f geometryNormal = hit.getNormal();
+        Vector3f normal = geometryNormal;
+        if (Vector3f::dot(normal, ray.getDirection()) > 0.0f) {
+            normal = -normal;
+        }
+
+        Vector3f wo = -ray.getDirection();
+        Vector3f diffuseColor = mat->getDiffuseColor(hit);
+
+        if (mat->isEmissive()) {
+            L += beta * mat->getEmission();
+            break;
+        }
+
+        if (!mat->isDelta()) {
+            L += gatherPhotons(pos, normal, wo, mat, diffuseColor, beta);
+        }
+
+        if (depth + 1 >= MAX_VCM_CAMERA_PATH_DEPTH) {
+            break;
+        }
+
+        float rrProb = 1.0f;
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
+
+        Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
+        BSDFSample sample = sampleBSDF(mat, diffuseColor, bsdfNormal, wo);
+        if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
+            break;
+        }
+
+        beta = beta * sample.throughputWeight;
+
+        Vector3f offsetNormal =
+            Vector3f::dot(sample.wi, geometryNormal) > 0.0f
+                ? geometryNormal
+                : -geometryNormal;
+
+        ray = Ray(pos + offsetNormal * CONNECT_EPS, sample.wi);
+    }
+
+    return isFiniteColor(L) ? L : Vector3f::ZERO;
 }
 
 int VCM::generateCameraPath(const Ray &cameraRay,
@@ -122,8 +313,7 @@ int VCM::generateCameraPath(const Ray &cameraRay,
         v.diffuseColor = mat->getDiffuseColor(hit);
         v.material = mat;
         v.wo = -ray.getDirection();
-        v.isDelta = mat->isGlass() ||
-            (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
+        v.isDelta = mat->isDelta();
         v.isLight = mat->isEmissive();
         v.type = VCMPathVertexType::Surface;
 
@@ -252,8 +442,7 @@ int VCM::generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth) {
         v.diffuseColor = mat->getDiffuseColor(hit);
         v.material = mat;
         v.wo = -ray.getDirection();
-        v.isDelta = mat->isGlass() ||
-            (mat->isMirror() && mat->getRoughness() < DELTA_MIRROR_ROUGHNESS);
+        v.isDelta = mat->isDelta();
         v.isLight = mat->isEmissive();
         v.type = VCMPathVertexType::Surface;
 
@@ -743,6 +932,8 @@ Vector3f VCM::trace(const Ray &cameraRay) {
 Vector3f VCM::trace(const Ray &cameraRay,
                     std::vector<FilmSplat> *splats,
                     float splatScale) {
+    return tracePM(cameraRay); // PM debug mode
+
     cameraPath.clear();
     lightPath.clear();
 

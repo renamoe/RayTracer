@@ -173,47 +173,26 @@ Image Renderer::renderVCM() {
 
     const auto renderStart = std::chrono::steady_clock::now();
     progress.start();
-    const float splatScale = 1.0f / static_cast<float>(numPixels);
+    VCM vcm(
+        scene,
+        config.bdptPrimaryDirectLightSamples,
+        config.bdptSecondaryDirectLightSamples,
+        config.vcmRadius
+    );
     for (int sampleIndex = 0; sampleIndex < config.numSamples; ++sampleIndex) {
-        VCM iterationVCM(
-            scene,
-            config.bdptPrimaryDirectLightSamples,
-            config.bdptSecondaryDirectLightSamples
-        );
-        iterationVCM.beginIteration(sampleIndex, width, height);
+        vcm.beginIteration(sampleIndex, width, height);
 
         #pragma omp parallel for schedule(dynamic, 1)
         for (int x = 0; x < width; ++x) {
-            VCM vcm(
-                scene,
-                config.bdptPrimaryDirectLightSamples,
-                config.bdptSecondaryDirectLightSamples
-            );
-            std::vector<VCM::FilmSplat> splats;
             for (int y = 0; y < height; ++y) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
 
-                splats.clear();
-                Vector3f color = vcm.trace(ray, &splats, splatScale);
-                for (const VCM::FilmSplat &splat : splats) {
-                    if (splat.x < 0 || splat.x >= width ||
-                        splat.y < 0 || splat.y >= height) {
-                        continue;
-                    }
-                    size_t index = static_cast<size_t>(splat.y) * width + splat.x;
-                    #pragma omp critical(vcm_splat_accumulate)
-                    {
-                        accumulated[index] += splat.contribution;
-                    }
-                }
+                Vector3f color = vcm.trace(ray);
 
                 size_t index = static_cast<size_t>(y) * width + x;
-                #pragma omp critical(vcm_splat_accumulate)
-                {
-                    accumulated[index] += color;
-                }
+                accumulated[index] += color;
             }
             progress.advance(height);
         }

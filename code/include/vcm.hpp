@@ -1,14 +1,16 @@
 #pragma once
 
 #include "Vector3f.h"
+#include "hash_grid.hpp"
 #include "material.hpp"
 #include "ray.hpp"
 #include "scene_parser.hpp"
+#include "path_vertex.hpp"
 
 #include <vector>
 
-constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 8;
-constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 5;
+constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 5;
+constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 3;
 
 enum class VCMPathVertexType {
     Camera,
@@ -36,7 +38,6 @@ struct VCMPathVertex {
     VCMPathVertexType type = VCMPathVertexType::Surface;
 };
 
-class SceneParser;
 
 class VCM {
 public:
@@ -47,8 +48,9 @@ public:
     };
 
     explicit VCM(SceneParser &scene,
-                 int primaryDirectLightSamples = 1,
-                 int secondaryDirectLightSamples = 1);
+                 int primaryDirectLightSamples,
+                 int secondaryDirectLightSamples,
+                 float baseRadius);
 
     void beginIteration(int iteration, int width, int height);
 
@@ -66,6 +68,17 @@ private:
         float cosThetaEye = 0.0f;
         float cosThetaLight = 0.0f;
     };
+
+    void generatePhotonPath(int maxDepth);
+
+    Vector3f gatherPhotons(const Vector3f &pos,
+                           const Vector3f &normal,
+                           const Vector3f &wo,
+                           Material *mat,
+                           const Vector3f &diffuseColor,
+                           const Vector3f &cameraThroughput) const;
+
+    Vector3f tracePM(const Ray &cameraRay);
 
     int generateCameraPath(const Ray &cameraRay,
                            std::vector<VCMPathVertex> &path,
@@ -117,4 +130,10 @@ private:
     int secondaryDirectLightSamples;
     std::vector<VCMPathVertex> cameraPath;
     std::vector<VCMPathVertex> lightPath;
+
+    int lightPathCount;
+    float baseRadius;
+    float pmRadius;
+    std::vector<PhotonVertex> lightPhotons;
+    HashGrid photonHashGrid;
 };

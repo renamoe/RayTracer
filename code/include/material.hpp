@@ -8,6 +8,8 @@
 #include "ray.hpp"
 #include "hit.hpp"
 
+constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
+
 enum class MaterialType {
     DIFFUSE,
     MIRROR,
@@ -55,6 +57,8 @@ public:
     bool isGlass() const;
 
     bool isEmissive() const;
+
+    bool isDelta() const;
 
     Vector3f Shade(const Ray &ray, const Hit &hit,
                    const Vector3f &dirToLight, const Vector3f &lightColor);

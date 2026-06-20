@@ -73,6 +73,10 @@ bool Material::isEmissive() const {
     return type == MaterialType::EMISSIVE || emission.length() > 0;
 }
 
+bool Material::isDelta() const {
+    return isGlass() || (isMirror() && roughness < DELTA_MIRROR_ROUGHNESS);
+}
+
 Vector3f Material::Shade(const Ray &ray, const Hit &hit,
                    const Vector3f &dirToLight, const Vector3f &lightColor) {
     Vector3f shaded = Vector3f::ZERO;

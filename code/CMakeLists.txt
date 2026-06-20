@@ -31,7 +31,8 @@ SET(RayTracer_SOURCES
         src/tone_mapping.cpp
         src/transform.cpp
         src/triangle.cpp
-        src/vcm.cpp)
+        src/vcm.cpp
+        src/hash_grid.cpp)
 
 SET(RayTracer_INCLUDES
         include/aabb.hpp
@@ -59,7 +60,8 @@ SET(RayTracer_INCLUDES
         include/triangle.hpp
         include/random.hpp
         include/vcm.hpp
-        )
+        include/hash_grid.hpp
+        include/path_vertex.hpp)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)

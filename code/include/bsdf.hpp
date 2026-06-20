@@ -3,7 +3,6 @@
 #include "Vector3f.h"
 #include "material.hpp"
 
-constexpr float DELTA_MIRROR_ROUGHNESS = 0.0015f;
 
 struct GlossySample {
     Vector3f dir;
