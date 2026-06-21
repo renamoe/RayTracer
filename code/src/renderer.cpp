@@ -208,7 +208,7 @@ Image Renderer::renderVCM() {
         for (int y = 0; y < height; ++y) {
             Vector3f color = accumulated[static_cast<size_t>(y) * width + x] /
                 static_cast<float>(config.numSamples);
-            // color = toneMap(color, config.exposure);
+            color = toneMap(color, config.exposure);
             image.SetPixel(x, y, color);
         }
     }
