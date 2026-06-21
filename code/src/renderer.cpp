@@ -193,8 +193,8 @@ Image Renderer::renderVCM() {
                 size_t pathIdx = static_cast<size_t>(y) * width + x;
                 // Vector3f color = vcm.traceVMOnly(pathIdx, ray);
                 // Vector3f color = vcm.traceVCOnly(pathIdx, ray);
-                Vector3f color = vcm.traceVCMNoMIS(pathIdx, ray);
-                // Vector3f color = vcm.trace(pathIdx, ray);
+                // Vector3f color = vcm.traceVCMNoMIS(pathIdx, ray);
+                Vector3f color = vcm.trace(pathIdx, ray);
 
 
                 size_t index = static_cast<size_t>(y) * width + x;
@@ -208,7 +208,7 @@ Image Renderer::renderVCM() {
         for (int y = 0; y < height; ++y) {
             Vector3f color = accumulated[static_cast<size_t>(y) * width + x] /
                 static_cast<float>(config.numSamples);
-            color = toneMap(color, config.exposure);
+            // color = toneMap(color, config.exposure);
             image.SetPixel(x, y, color);
         }
     }

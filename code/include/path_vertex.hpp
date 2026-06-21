@@ -24,7 +24,12 @@ struct VCMPathVertex {
     float pdfReverseArea = 0.0f;
     float pdfForwardSolidAngle = 0.0f;
 
+    float dVCM = 0.0f;
+    float dVC = 0.0f;
+    float dVM = 0.0f;
+
     bool isDelta = false;
     bool isLight = false;
+
     VCMPathVertexType type = VCMPathVertexType::Surface;
 };

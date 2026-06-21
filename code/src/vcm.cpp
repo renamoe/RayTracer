@@ -10,14 +10,6 @@
 #include <cstddef>
 #include <vector>
 
-#ifndef VCM_DEBUG_MIS
-#define VCM_DEBUG_MIS 0
-#endif
-
-#if VCM_DEBUG_MIS
-#include <iostream>
-#endif
-
 namespace {
 
 constexpr float CONNECT_EPS = 1e-4f;
@@ -80,9 +72,16 @@ VCM::VCM(SceneParser &scene,
 }
 
 void VCM::beginIteration(int iteration, int width, int height) {
+    lightPathCount = width * height;
+
     // pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
     pmRadius = baseRadius;
-    lightPathCount = width * height;
+
+    radius2 = pmRadius * pmRadius;
+    etaVCM = M_PI * radius2 * lightPathCount;
+    misVmWeightFactor = etaVCM;
+    misVcWeightFactor = 1.0f / etaVCM;
+    vmNormalization = 1.0f / etaVCM;
 
     lightPhotons.clear();
     lightPhotons.reserve(lightPathCount * 3);
@@ -125,6 +124,12 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
     lightVertex.type = VCMPathVertexType::Light;
 
     lightPhotons.push_back(lightVertex);
+
+    float directPdfA = emit.pdfPos;
+    float emissionPdfW = emit.pdfDir;
+    float dVCM = directPdfA / emissionPdfW;
+    float dVC = cosEmit / emissionPdfW;
+    float dVM = dVC * misVcWeightFactor;
 
     Vector3f beta = emit.emission * cosEmit / (emit.pdfPos * emit.pdfDir);
 
@@ -169,6 +174,17 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
             v.normal
         );
 
+        float dist2 = (v.pos - p.pos).squaredLength();
+        float cosIn = std::max(1e-6f, std::abs(Vector3f::dot(v.normal, v.wo)));
+
+        dVCM *= dist2 / cosIn;
+        dVC /= cosIn;
+        dVM /= cosIn;
+
+        v.dVCM = dVCM;
+        v.dVC = dVC;
+        v.dVM = dVM;
+
         lightPhotons.push_back(v);
 
         if (mat->isEmissive()) {
@@ -180,18 +196,32 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         }
 
         float rrProb = 1.0f;
-        if (depth >= RR_START_DEPTH) {
-            rrProb = rrContinueProbability(beta);
-            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
-                break;
-            }
-            beta = beta / rrProb;
-        }
+        // if (depth >= RR_START_DEPTH) {
+        //     rrProb = rrContinueProbability(beta);
+        //     if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+        //         break;
+        //     }
+        //     beta = beta / rrProb;
+        // }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
         BSDFSample sample = sampleBSDF(mat, mat->getDiffuseColor(hit), bsdfNormal, -ray.getDirection());
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             break;
+        }
+
+        float pdfFwd = sample.pdf * rrProb;
+        float pdfRev = bsdfPdf(mat, bsdfNormal, sample.wi, v.wo) * rrProb;
+        float cosOut = std::max(0.0f, std::abs(Vector3f::dot(bsdfNormal, sample.wi)));
+
+        if (sample.isDelta) {
+            dVCM = 0.0f;
+            dVC *= cosOut;
+            dVM *= cosOut;
+        } else {
+            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + misVmWeightFactor);
+            dVM = (cosOut / pdfFwd) * (dVM * pdfRev + dVCM * misVcWeightFactor + 1.0f);
+            dVCM = 1.0f / pdfFwd;
         }
 
         VCMPathVertex &curr = lightPhotons.back();
@@ -213,7 +243,8 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
 }
 
 Vector3f VCM::gatherPhotons(const VCMPathVertex &v,
-                            const Vector3f &cameraThroughput) const {
+                            const Vector3f &cameraThroughput,
+                            bool useMis) const {
     if (v.material == nullptr || v.isDelta || v.isLight) {
         return Vector3f::ZERO;
     }
@@ -232,19 +263,34 @@ Vector3f VCM::gatherPhotons(const VCMPathVertex &v,
             return;
         }
 
-        sum += photon.throughput * f;
+        if (useMis) {
+            float cameraPdfW = bsdfPdf(v.material, v.normal, v.wo, photon.wo);
+            float cameraRevPdfW = bsdfPdf(v.material, v.normal, photon.wo, v.wo);
+
+            float wLight =
+                photon.dVCM * misVcWeightFactor +
+                photon.dVM * cameraPdfW;
+
+            float wCamera =
+                v.dVCM * misVcWeightFactor +
+                v.dVM * cameraRevPdfW;
+
+            float misWeight = 1.0f / (1.0f + wLight + wCamera);
+            sum += photon.throughput * f * misWeight;
+        } else {
+            sum += photon.throughput * f;
+        }
     });
 
-    float normalization = 1.0f / (M_PI * pmRadius * pmRadius * lightPathCount);
-
-    return cameraThroughput * sum * normalization;
+    return cameraThroughput * sum * vmNormalization;
 }
 
 Vector3f VCM::generateCameraPath(const Ray &cameraRay,
                                  std::vector<VCMPathVertex> &path,
                                  int maxDepth,
                                  bool includeHitLight,
-                                 bool includeMerging) {
+                                 bool includeMerging,
+                                 bool useVmMis) {
     path.clear();
 
     Camera *camera = scene.getCamera();
@@ -262,6 +308,12 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
     Vector3f L = Vector3f::ZERO;
     Vector3f beta(1, 1, 1);
     float pendingPdfW = 0.0f;
+
+    float cameraPdfW = camera->rasterToSolidAnglePdf(cameraRay.getDirection());
+
+    float dVCM = lightPathCount / cameraPdfW;
+    float dVC = 0.0f;
+    float dVM = 0.0f;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
         Hit hit;
@@ -293,13 +345,16 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
         v.type = VCMPathVertexType::Surface;
 
         VCMPathVertex &p = path.back();
+        float dist2 = (v.pos - p.pos).squaredLength();
+        float cosIn = std::max(1e-6f, std::abs(Vector3f::dot(v.normal, v.wo)));
+
         if (p.type == VCMPathVertexType::Camera) {
             v.pdfForwardSolidAngle =
                 scene.getCamera()->rasterToSolidAnglePdf(ray.getDirection());
             v.pdfForwardArea = cameraAreaPdf(
                 v,
                 ray.getDirection(),
-                (v.pos - p.pos).squaredLength()
+                dist2
             );
         } else {
             v.pdfForwardSolidAngle = pendingPdfW;
@@ -310,6 +365,14 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
                 v.normal
             );
         }
+        
+        dVCM *= dist2 / cosIn;
+        dVC /= cosIn;
+        dVM /= cosIn;
+
+        v.dVCM = dVCM;
+        v.dVC = dVC;
+        v.dVM = dVM;
 
         path.push_back(v);
 
@@ -322,7 +385,7 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
         }
 
         if (includeMerging && !mat->isDelta()) {
-            L += gatherPhotons(v, beta);
+            L += gatherPhotons(v, beta, useVmMis);
         }
 
         if (depth + 1 >= maxDepth) {
@@ -330,13 +393,13 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
         }
 
         float rrProb = 1.0f;
-        if (depth >= RR_START_DEPTH) {
-            rrProb = rrContinueProbability(beta);
-            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
-                break;
-            }
-            beta = beta / rrProb;
-        }
+        // if (depth >= RR_START_DEPTH) {
+        //     rrProb = rrContinueProbability(beta);
+        //     if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+        //         break;
+        //     }
+        //     beta = beta / rrProb;
+        // }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
         BSDFSample sample = sampleBSDF(mat, v.diffuseColor, bsdfNormal, v.wo);
@@ -344,6 +407,19 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
             break;
         }
 
+        float pdfFwd = sample.pdf * rrProb;
+        float pdfRev = bsdfPdf(mat, bsdfNormal, sample.wi, v.wo) * rrProb;
+        float cosOut = std::max(0.0f, std::abs(Vector3f::dot(bsdfNormal, sample.wi)));
+
+        if (sample.isDelta) {
+            dVCM = 0.0f;
+            dVC *= cosOut;
+            dVM *= cosOut;
+        } else {
+            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + misVmWeightFactor);
+            dVM = (cosOut / pdfFwd) * (dVM * pdfRev + dVCM * misVcWeightFactor + 1.0f);
+            dVCM = 1.0f / pdfFwd;
+        }
 
         VCMPathVertex &curr = path.back();
         curr.wi = sample.wi;
@@ -589,6 +665,113 @@ float VCM::vcmMisWeight(const std::vector<VCMPathVertex> &lightVertices,
     return 1.0f / (1.0f + sumRi);
 }
 
+float VCM::vcMisWeight(const VCMPathVertex &eye,
+                       const VCMPathVertex &light,
+                       ConnectionGeometry &connection) const {
+    float cameraPdfW = bsdfPdf(eye.material, eye.normal, eye.wo, connection.eyeToLight);
+    float cameraRevPdfW = bsdfPdf(eye.material, eye.normal, connection.eyeToLight, eye.wo);
+
+    float lightPdfW = bsdfPdf(light.material, light.normal, light.wo, connection.lightToEye);
+    float lightRevPdfW = bsdfPdf(light.material, light.normal, connection.lightToEye, light.wo);
+
+    float cameraPdfA = cameraPdfW * connection.cosThetaLight / connection.dist2;
+    float lightPdfA = lightPdfW * connection.cosThetaEye / connection.dist2;
+
+    float wLight = cameraPdfA *
+        (misVmWeightFactor + light.dVCM + light.dVC * lightRevPdfW);
+
+    float wCamera = lightPdfA *
+        (misVmWeightFactor + eye.dVCM + eye.dVC * cameraRevPdfW);
+
+    float misWeight = 1.0f / (1.0f + wLight + wCamera);
+    return misWeight;
+}
+
+float VCM::cameraHitLightMisWeight(
+        int cameraIndex,
+        const std::vector<VCMPathVertex> &cameraPath) const {
+    if (cameraIndex <= 1 || cameraIndex >= (int)cameraPath.size()) {
+        return 1.0f;
+    }
+
+    const VCMPathVertex &light = cameraPath[cameraIndex];
+    const VCMPathVertex &prev = cameraPath[cameraIndex - 1];
+    if (prev.isDelta) {
+        return 1.0f;
+    }
+
+    float directPdfArea = scene.lightAreaPdf();
+    float cosEmit = std::max(0.0f, Vector3f::dot(light.normal, light.wo));
+    float emissionPdfW = cosEmit / M_PI;
+    float wCamera = directPdfArea * light.dVCM + emissionPdfW * light.dVC;
+
+    if (!std::isfinite(wCamera) || wCamera < 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f / (1.0f + wCamera);
+}
+
+float VCM::directLightMisWeight(const VCMPathVertex &eye,
+                                const ConnectionGeometry &connection,
+                                float directPdfArea) const {
+    if (eye.material == nullptr || directPdfArea <= 0.0f ||
+        connection.dist2 <= 0.0f || connection.cosThetaLight <= 0.0f) {
+        return 0.0f;
+    }
+
+    float bsdfPdfW = bsdfPdf(
+        eye.material,
+        eye.normal,
+        eye.wo,
+        connection.eyeToLight
+    );
+    float bsdfRevPdfW = bsdfPdf(
+        eye.material,
+        eye.normal,
+        connection.eyeToLight,
+        eye.wo
+    );
+
+    float bsdfPdfArea = bsdfPdfW * connection.cosThetaLight / connection.dist2;
+    float wLight = bsdfPdfArea / directPdfArea;
+
+    float emissionPdfW = connection.cosThetaLight / M_PI;
+    float emissionAreaOverDirectArea =
+        emissionPdfW * connection.cosThetaEye /
+        (connection.dist2 * directPdfArea);
+    float wCamera = emissionAreaOverDirectArea *
+        (misVmWeightFactor + eye.dVCM + eye.dVC * bsdfRevPdfW);
+
+    float weightSum = wLight + wCamera;
+    if (!std::isfinite(weightSum) || weightSum < 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f / (1.0f + weightSum);
+}
+
+float VCM::lightToCameraMisWeight(const VCMPathVertex &light,
+                                  float cameraPdfArea,
+                                  const Vector3f &vertexToCamera) const {
+    if (light.material == nullptr || cameraPdfArea <= 0.0f ||
+        lightPathCount <= 0) {
+        return 0.0f;
+    }
+
+    float bsdfRevPdfW = bsdfPdf(
+        light.material,
+        light.normal,
+        vertexToCamera,
+        light.wo
+    );
+    float wLight = (cameraPdfArea / static_cast<float>(lightPathCount)) *
+        (misVmWeightFactor + light.dVCM + light.dVC * bsdfRevPdfW);
+
+    if (!std::isfinite(wLight) || wLight < 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f / (1.0f + wLight);
+}
+
 Vector3f VCM::connectLightToCamera(int s,
                                    std::vector<FilmSplat> *splats,
                                    float splatScale,
@@ -641,9 +824,9 @@ Vector3f VCM::connectLightToCamera(int s,
         contribution = light.throughput * fLight * pdfCameraArea;
     }
 
-    std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
-    std::vector<VCMPathVertex> cameraVertices(1, cameraPath[0]);
-    float w = useMis ? vcmMisWeight(lightVertices, cameraVertices, s, 1, pdfCameraArea) : 1.0f;
+    float w = useMis
+        ? lightToCameraMisWeight(light, pdfCameraArea, vertexToCamera)
+        : 1.0f;
     contribution = contribution * (w * splatScale);
     if (contribution.squaredLength() <= 0.0f || !isFiniteColor(contribution)) {
         return Vector3f::ZERO;
@@ -664,7 +847,7 @@ Vector3f VCM::connectVCM(int s,
                          float splatScale,
                          const std::vector<VCMPathVertex> &cameraPath,
                          const std::vector<VCMPathVertex> &lightPath,
-                         bool useMis) {
+                         bool useVcMis) {
     if ((s == 0 && t == 1) || (s == 1 && t == 1)) {
         return Vector3f::ZERO;
     }
@@ -674,7 +857,7 @@ Vector3f VCM::connectVCM(int s,
     }
 
     if (t == 1) {
-        return connectLightToCamera(s, splats, splatScale, lightPath, cameraPath, useMis);
+        return connectLightToCamera(s, splats, splatScale, lightPath, cameraPath, useVcMis);
     }
 
     int ci = t - 1;
@@ -682,12 +865,12 @@ Vector3f VCM::connectVCM(int s,
     bool includeLightTracingMis = splats != nullptr && splatScale > 0.0f;
     if (eye.isLight) {
         return s == 0
-            ? estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useMis)
+            ? estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useVcMis)
             : Vector3f::ZERO;
     }
 
     if (s == 0) {
-        return estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useMis);
+        return estimateCameraHitLight(ci, includeLightTracingMis, cameraPath, lightPath, useVcMis);
     }
 
     if (s == 1) {
@@ -695,7 +878,7 @@ Vector3f VCM::connectVCM(int s,
         int directSamples = surfaceDepth == 0
             ? primaryDirectLightSamples
             : secondaryDirectLightSamples;
-        return estimateDirectLight(eye, ci, directSamples, cameraPath, lightPath, useMis);
+        return estimateDirectLight(eye, ci, directSamples, cameraPath, lightPath, useVcMis);
     }
 
     int li = s - 1;
@@ -711,16 +894,11 @@ Vector3f VCM::connectVCM(int s,
         return Vector3f::ZERO;
     }
 
-    std::vector<VCMPathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
-    std::vector<VCMPathVertex> cameraVertices(cameraPath.begin(), cameraPath.begin() + t);
-    float w = useMis ? vcmMisWeight(lightVertices, cameraVertices, s, t) : 1.0f;
-#if VCM_DEBUG_MIS
-    if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
-        std::cout << "bad mis weight: " << w << "\n";
+    if (useVcMis) {
+        return c * vcMisWeight(eye, light, connection);
     }
-#endif
 
-    return c * w;
+    return c;
 }
 
 Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
@@ -760,13 +938,8 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
             continue;
         }
 
-        std::vector<VCMPathVertex> lightVertices(1, lightVertex);
-        std::vector<VCMPathVertex> cameraVertices(
-            cameraPath.begin(),
-            cameraPath.begin() + cameraIndex + 1
-        );
         float wLight = useMis
-            ? vcmMisWeight(lightVertices, cameraVertices, 1, cameraIndex + 1)
+            ? directLightMisWeight(eye, connection, sample.pdf)
             : 1.0f;
 
         result += c * wLight;
@@ -797,13 +970,7 @@ Vector3f VCM::estimateCameraHitLight(int ci,
         return contribution;
     }
 
-    std::vector<VCMPathVertex> lightVertices;
-    std::vector<VCMPathVertex> cameraVertices(
-        cameraPath.begin(),
-        cameraPath.begin() + ci + 1
-    );
-
-    float wBsdf = useMis ? vcmMisWeight(lightVertices, cameraVertices, 0, ci + 1) : 1.0f;
+    float wBsdf = useMis ? cameraHitLightMisWeight(ci, cameraPath) : 1.0f;
     return contribution * wBsdf;
 }
 
@@ -815,7 +982,7 @@ Vector3f VCM::trace(size_t pathIdx,
                     const Ray &cameraRay,
                     std::vector<FilmSplat> *splats,
                     float splatScale) {
-    return traceVCMNoMIS(pathIdx, cameraRay, splats, splatScale);
+    return traceVCMWithMIS(pathIdx, cameraRay, splats, splatScale);
 }
 
 Vector3f VCM::traceVMOnly(size_t pathIdx, const Ray &cameraRay) {
@@ -826,6 +993,7 @@ Vector3f VCM::traceVMOnly(size_t pathIdx, const Ray &cameraRay) {
         cameraRay,
         cameraPath,
         MAX_VCM_CAMERA_PATH_DEPTH,
+        true,
         true,
         true
     );
@@ -851,7 +1019,8 @@ Vector3f VCM::traceVCOnly(size_t pathIdx,
         cameraPath,
         MAX_VCM_CAMERA_PATH_DEPTH,
         false,
-        false
+        false,
+        true
     );
 
     Vector3f L = Vector3f::ZERO;
@@ -884,12 +1053,45 @@ Vector3f VCM::traceVCMNoMIS(size_t pathIdx,
         cameraPath,
         MAX_VCM_CAMERA_PATH_DEPTH,
         false,
-        true
+        true,
+        false
     );
 
     for (int t = 1; t <= (int)cameraPath.size(); ++t) {
         for (int s = 0; s <= (int)lightPath.size(); ++s) {
             L += connectVCM(s, t, splats, splatScale, cameraPath, lightPath, false);
+        }
+    }
+
+    return isFiniteColor(L) ? L : Vector3f::ZERO;
+}
+
+Vector3f VCM::traceVCMWithMIS(size_t pathIdx,
+                              const Ray &cameraRay,
+                              std::vector<FilmSplat> *splats,
+                              float splatScale) {
+    if (pathIdx + 1 >= pathHeads.size()) {
+        return Vector3f::ZERO;
+    }
+
+    std::vector<VCMPathVertex> cameraPath;
+    std::vector<VCMPathVertex> lightPath(
+        lightPhotons.begin() + pathHeads[pathIdx],
+        lightPhotons.begin() + pathHeads[pathIdx + 1]
+    );
+
+    Vector3f L = generateCameraPath(
+        cameraRay,
+        cameraPath,
+        MAX_VCM_CAMERA_PATH_DEPTH,
+        false,
+        true,
+        true
+    );
+
+    for (int t = 1; t <= (int)cameraPath.size(); ++t) {
+        for (int s = 0; s <= (int)lightPath.size(); ++s) {
+            L += connectVCM(s, t, splats, splatScale, cameraPath, lightPath, true);
         }
     }
 

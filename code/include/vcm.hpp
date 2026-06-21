@@ -43,6 +43,10 @@ public:
                            const Ray &cameraRay,
                            std::vector<FilmSplat> *splats = nullptr,
                            float splatScale = 0.0f);
+    Vector3f traceVCMWithMIS(size_t pathIdx,
+                             const Ray &cameraRay,
+                             std::vector<FilmSplat> *splats = nullptr,
+                             float splatScale = 0.0f);
 
 private:
     struct ConnectionGeometry {
@@ -57,13 +61,15 @@ private:
     void generateLightPath(size_t pathIdx, int maxDepth);
 
     Vector3f gatherPhotons(const VCMPathVertex &v,
-                           const Vector3f &cameraThroughput) const;
+                           const Vector3f &cameraThroughput,
+                           bool useMis) const;
 
     Vector3f generateCameraPath(const Ray &cameraRay,
                      std::vector<VCMPathVertex> &cameraPath, 
                      int maxDepth,
                      bool includeHitLight,
-                     bool includeMerging);
+                     bool includeMerging,
+                     bool useVmMis);
 
     bool makeConnectionGeometry(const VCMPathVertex &eye,
                                 const VCMPathVertex &light,
@@ -118,6 +124,18 @@ private:
                        int s,
                        int t,
                        float cameraPdfArea = 0.0f) const;
+    
+    float vcMisWeight(const VCMPathVertex &eye,
+                      const VCMPathVertex &light,
+                      ConnectionGeometry &connection) const;
+    float cameraHitLightMisWeight(int cameraIndex,
+                                  const std::vector<VCMPathVertex> &cameraPath) const;
+    float directLightMisWeight(const VCMPathVertex &eye,
+                               const ConnectionGeometry &connection,
+                               float directPdfArea) const;
+    float lightToCameraMisWeight(const VCMPathVertex &light,
+                                 float cameraPdfArea,
+                                 const Vector3f &vertexToCamera) const;
 
     SceneParser &scene;
     int primaryDirectLightSamples;
@@ -129,4 +147,10 @@ private:
     std::vector<VCMPathVertex> lightPhotons;
     HashGrid photonHashGrid;
     std::vector<size_t> pathHeads;
+
+    float radius2;
+    float etaVCM = 0.0f;
+    float misVmWeightFactor = 0.0f;
+    float misVcWeightFactor = 0.0f;
+    float vmNormalization = 0.0f;
 };
