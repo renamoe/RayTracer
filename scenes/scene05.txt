@@ -1,0 +1,229 @@
+PerspectiveCamera {
+    center 0.08 0.74 2.72
+    direction -0.03 -0.08 -1
+    up 0 1 0
+    angle 40
+    width 800
+    height 600
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 12
+    Material {
+        diffuseColor 0.78 0.76 0.70
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.63 0.08 0.06
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.12 0.55 0.20
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.50 0.49 0.44
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.25 0.43 0.70
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.86 0.54 0.20
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.63 0.58
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.55 0.38 0.72
+        specularColor 0 0 0
+        shininess 10
+    }
+    GlassMaterial {
+        diffuseColor 0 0 0
+        specularColor 1.0 1.0 1.0
+        transmissionColor 0.96 0.99 1.0
+        ior 1.5
+    }
+    GlassMaterial {
+        diffuseColor 0 0 0
+        specularColor 1.0 1.0 1.0
+        transmissionColor 0.90 0.96 1.0
+        ior 1.52
+    }
+    MirrorMaterial {
+        mirrorColor 0.92 0.92 0.90
+        roughness 0.0005
+    }
+    Material {
+        diffuseColor 1.00 0.86 0.65
+        specularColor 0 0 0
+        emission 135 105 70
+        shininess 0
+    }
+}
+
+Group {
+    numObjects 22
+    MaterialIndex 0
+    Triangle {
+        vertex0 -1.00 0.00 0.99
+        vertex1 1.00 0.00 0.99
+        vertex2 1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 0.99
+        vertex1 1.00 0.00 -1.04
+        vertex2 -1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 1.59 0.99
+        vertex1 1.00 1.59 -1.04
+        vertex2 1.00 1.59 0.99
+    }
+    Triangle {
+        vertex0 -1.00 1.59 0.99
+        vertex1 -1.00 1.59 -1.04
+        vertex2 1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 -1.04
+        vertex1 1.00 0.00 -1.04
+        vertex2 1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 -1.04
+        vertex1 1.00 1.59 -1.04
+        vertex2 -1.00 1.59 -1.04
+    }
+    MaterialIndex 1
+    Triangle {
+        vertex0 -1.00 0.00 0.99
+        vertex1 -1.00 0.00 -1.04
+        vertex2 -1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 0.99
+        vertex1 -1.00 1.59 -1.04
+        vertex2 -1.00 1.59 0.99
+    }
+    MaterialIndex 2
+    Triangle {
+        vertex0 1.00 0.00 0.99
+        vertex1 1.00 1.59 -1.04
+        vertex2 1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 1.00 0.00 0.99
+        vertex1 1.00 1.59 0.99
+        vertex2 1.00 1.59 -1.04
+    }
+    MaterialIndex 11
+    Transform {
+        Translate -0.80 1.05 -1.025
+        Scale 0.03 0.18 1
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+    MaterialIndex 10
+    Transform {
+        Translate 0.60 0.72 -0.55
+        XRotate 18
+        YRotate -25
+        Scale 0.44 0.48 0.012
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 9
+    Transform {
+        Translate 0.08 -0.102 0.24
+        YRotate 24
+        UniformScale 1.45
+        TriangleMesh {
+            obj_file mesh/bunny_1k.obj
+        }
+    }
+    MaterialIndex 8
+    Transform {
+        Translate 0.28 0.00 -0.24
+        YRotate -18
+        Scale 0.25 0.30 0.25
+        TriangleMesh {
+            obj_file mesh/glass_tumbler.obj
+        }
+    }
+    Sphere {
+        center -0.35 0.17 -0.27
+        radius 0.17
+    }
+    MaterialIndex 3
+    Transform {
+        Translate -0.73 0.22 -0.48
+        YRotate 12
+        Scale 0.09 0.22 0.09
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 4
+    Transform {
+        Translate 0.78 0.08 0.16
+        YRotate -24
+        Scale 0.08 0.08 0.08
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 5
+    Sphere {
+        center -0.62 0.09 0.18
+        radius 0.09
+    }
+    MaterialIndex 6
+    Sphere {
+        center -0.18 0.07 0.58
+        radius 0.07
+    }
+    Transform {
+        Translate -0.43 0.055 0.48
+        YRotate 18
+        Scale 0.11 0.055 0.08
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 7
+    Sphere {
+        center 0.70 0.08 -0.73
+        radius 0.08
+    }
+    MaterialIndex 3
+    Transform {
+        Translate 0.47 0.06 0.49
+        YRotate -10
+        Scale 0.095 0.048 0.095
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+}
