@@ -196,13 +196,13 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         }
 
         float rrProb = 1.0f;
-        // if (depth >= RR_START_DEPTH) {
-        //     rrProb = rrContinueProbability(beta);
-        //     if (rrProb <= 0.0f || Random::get_float() > rrProb) {
-        //         break;
-        //     }
-        //     beta = beta / rrProb;
-        // }
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
         BSDFSample sample = sampleBSDF(mat, mat->getDiffuseColor(hit), bsdfNormal, -ray.getDirection());
@@ -393,13 +393,13 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
         }
 
         float rrProb = 1.0f;
-        // if (depth >= RR_START_DEPTH) {
-        //     rrProb = rrContinueProbability(beta);
-        //     if (rrProb <= 0.0f || Random::get_float() > rrProb) {
-        //         break;
-        //     }
-        //     beta = beta / rrProb;
-        // }
+        if (depth >= RR_START_DEPTH) {
+            rrProb = rrContinueProbability(beta);
+            if (rrProb <= 0.0f || Random::get_float() > rrProb) {
+                break;
+            }
+            beta = beta / rrProb;
+        }
 
         Vector3f bsdfNormal = mat->isGlass() ? geometryNormal : normal;
         BSDFSample sample = sampleBSDF(mat, v.diffuseColor, bsdfNormal, v.wo);
