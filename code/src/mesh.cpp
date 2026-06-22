@@ -35,6 +35,23 @@ float roughnessFromNs(float ns) {
     return std::clamp(std::sqrt(2.0f / (ns + 2.0f)), 0.0015f, 1.0f);
 }
 
+Vector3f transmissionColorFromMtl(const tinyobj::material_t &m) {
+    Vector3f transmittance(
+        m.transmittance[0],
+        m.transmittance[1],
+        m.transmittance[2]
+    );
+    float maxChannel = std::max(
+        transmittance.x(),
+        std::max(transmittance.y(), transmittance.z())
+    );
+    if (maxChannel <= 0.0f) {
+        return Vector3f(1, 1, 1);
+    }
+
+    return transmittance / maxChannel;
+}
+
 MaterialType typeFromMtl(const tinyobj::material_t &m) {
     Vector3f Ke(m.emission[0], m.emission[1], m.emission[2]);
     Vector3f Ks(m.specular[0], m.specular[1], m.specular[2]);
@@ -154,6 +171,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
     for (const auto& m : materials) {
         MaterialType type = typeFromMtl(m);
         float roughness = roughnessFromNs(m.shininess);
+        Vector3f transmissionColor = transmissionColorFromMtl(m);
 
         auto *mat = new Material(
             Vector3f(m.diffuse[0], m.diffuse[1], m.diffuse[2]),
@@ -161,7 +179,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
             Vector3f(m.emission[0], m.emission[1], m.emission[2]),
             m.shininess,
             type,
-            Vector3f(1, 1, 1),
+            transmissionColor,
             m.ior > 0.0f ? m.ior : 1.5f,
             roughness
         );
