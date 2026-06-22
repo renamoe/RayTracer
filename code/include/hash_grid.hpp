@@ -36,7 +36,9 @@ public:
     HashGrid() = default;
     ~HashGrid() = default;
 
-    void build(float radius, const std::vector<VCMPathVertex> &vertices);
+    void build(float radius,
+               const std::vector<VCMPathVertex> &vertices,
+               bool causticOnly);
 
     template<class Callback>
     void query(const Vector3f &p, Callback &&callback) const {
@@ -63,7 +65,7 @@ public:
 
 private:
     Int3 cellOf(const Vector3f &p) const;
-    bool isMergeable(const VCMPathVertex &p) const;
+    bool isMergeable(const VCMPathVertex &p, bool causticOnly) const;
 
     float radius2;
     float cellSize;

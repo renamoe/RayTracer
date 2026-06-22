@@ -167,6 +167,10 @@ Image Renderer::renderVCM() {
         static_cast<size_t>(width) * static_cast<size_t>(height),
         Vector3f::ZERO
     );
+    std::vector<Vector3f> splatAccumulated(
+        static_cast<size_t>(width) * static_cast<size_t>(height),
+        Vector3f::ZERO
+    );
 
     const long long numPixels = static_cast<long long>(width) * height;
     const long long primarySamples = numPixels * static_cast<long long>(config.numSamples);
@@ -174,17 +178,22 @@ Image Renderer::renderVCM() {
 
     const auto renderStart = std::chrono::steady_clock::now();
     progress.start();
+    const float splatScale = 1.0f / static_cast<float>(numPixels);
     VCM vcm(
         scene,
         config.bdptPrimaryDirectLightSamples,
         config.bdptSecondaryDirectLightSamples,
-        config.vcmRadius
+        config.vcmRadius,
+        config.vcmCameraPathDepth,
+        config.vcmLightPathDepth,
+        config.vcmCausticOnlyMerging
     );
     for (int sampleIndex = 0; sampleIndex < config.numSamples; ++sampleIndex) {
         vcm.beginIteration(sampleIndex, width, height);
 
         #pragma omp parallel for schedule(dynamic, 1)
         for (int x = 0; x < width; ++x) {
+            std::vector<VCM::FilmSplat> splats;
             for (int y = 0; y < height; ++y) {
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
@@ -194,7 +203,19 @@ Image Renderer::renderVCM() {
                 // Vector3f color = vcm.traceVMOnly(pathIdx, ray);
                 // Vector3f color = vcm.traceVCOnly(pathIdx, ray);
                 // Vector3f color = vcm.traceVCMNoMIS(pathIdx, ray);
-                Vector3f color = vcm.trace(pathIdx, ray);
+                splats.clear();
+                Vector3f color = vcm.trace(pathIdx, ray, &splats, splatScale);
+                for (const VCM::FilmSplat &splat : splats) {
+                    if (splat.x < 0 || splat.x >= width ||
+                        splat.y < 0 || splat.y >= height) {
+                        continue;
+                    }
+                    size_t splatIndex = static_cast<size_t>(splat.y) * width + splat.x;
+                    #pragma omp critical(vcm_splat_accumulate)
+                    {
+                        splatAccumulated[splatIndex] += splat.contribution;
+                    }
+                }
 
 
                 size_t index = static_cast<size_t>(y) * width + x;
@@ -206,7 +227,8 @@ Image Renderer::renderVCM() {
 
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
-            Vector3f color = accumulated[static_cast<size_t>(y) * width + x] /
+            size_t index = static_cast<size_t>(y) * width + x;
+            Vector3f color = (accumulated[index] + splatAccumulated[index]) /
                 static_cast<float>(config.numSamples);
             color = toneMap(color, config.exposure);
             image.SetPixel(x, y, color);
@@ -238,6 +260,13 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
                   << config.bdptPrimaryDirectLightSamples
                   << ", secondary="
                   << config.bdptSecondaryDirectLightSamples;
+    }
+    if (config.integrator == IntegratorType::VCM) {
+        std::cout << ", vcm base radius: " << config.vcmRadius
+                  << ", vcm depth: camera=" << config.vcmCameraPathDepth
+                  << ", light=" << config.vcmLightPathDepth
+                  << ", vcm merging: "
+                  << (config.vcmCausticOnlyMerging ? "caustic-only" : "all");
     }
 #ifdef _OPENMP
     std::cout << ", threads: " << omp_get_max_threads();

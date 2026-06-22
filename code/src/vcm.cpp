@@ -64,18 +64,24 @@ float pdfAreaFromDirection(const VCMPathVertex &from,
 VCM::VCM(SceneParser &scene,
          int primaryDirectLightSamples,
          int secondaryDirectLightSamples,
-         float baseRadius)
+         float baseRadius,
+         int maxCameraPathDepth,
+         int maxLightPathDepth,
+         bool causticOnlyMerging)
     : scene(scene),
       primaryDirectLightSamples(std::max(0, primaryDirectLightSamples)),
       secondaryDirectLightSamples(std::max(0, secondaryDirectLightSamples)),
+      maxCameraPathDepth(std::max(1, maxCameraPathDepth)),
+      maxLightPathDepth(std::max(1, maxLightPathDepth)),
+      causticOnlyMerging(causticOnlyMerging),
       baseRadius(baseRadius) {
 }
 
 void VCM::beginIteration(int iteration, int width, int height) {
     lightPathCount = width * height;
 
-    // pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
-    pmRadius = baseRadius;
+    pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
+    // pmRadius = baseRadius;
 
     radius2 = pmRadius * pmRadius;
     etaVCM = M_PI * radius2 * lightPathCount;
@@ -84,15 +90,15 @@ void VCM::beginIteration(int iteration, int width, int height) {
     vmNormalization = 1.0f / etaVCM;
 
     lightPhotons.clear();
-    lightPhotons.reserve(lightPathCount * 3);
+    lightPhotons.reserve(lightPathCount * maxLightPathDepth);
 
     pathHeads.resize(lightPathCount + 1);
     for (int i = 0; i < lightPathCount; ++i) {
-        generateLightPath(i, MAX_VCM_LIGHT_PATH_DEPTH);
+        generateLightPath(i, maxLightPathDepth);
     }
     pathHeads[lightPathCount] = lightPhotons.size();
 
-    photonHashGrid.build(pmRadius, lightPhotons);
+    photonHashGrid.build(pmRadius, lightPhotons, causticOnlyMerging);
 }
 
 void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
@@ -135,6 +141,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
 
     Ray ray(emit.pos + emit.normal * CONNECT_EPS, emit.dir);
     float pendingPdfW = emit.pdfDir;
+    bool hasDeltaAncestor = false;
 
     for (int depth = 1; depth < maxDepth; ++depth) {
         Hit hit;
@@ -163,6 +170,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         v.material = mat;
         v.isDelta = mat->isDelta();
         v.isLight = mat->isEmissive();
+        v.isCaustic = hasDeltaAncestor;
         v.type = VCMPathVertexType::Surface;
 
         VCMPathVertex &p = lightPhotons.back();
@@ -219,7 +227,10 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
             dVC *= cosOut;
             dVM *= cosOut;
         } else {
-            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + misVmWeightFactor);
+            float vmCompetition = causticOnlyMerging && !hasDeltaAncestor
+                ? 0.0f
+                : misVmWeightFactor;
+            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + vmCompetition);
             dVM = (cosOut / pdfFwd) * (dVM * pdfRev + dVCM * misVcWeightFactor + 1.0f);
             dVCM = 1.0f / pdfFwd;
         }
@@ -230,6 +241,9 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
             VCMPathVertex &prev = lightPhotons[lightPhotons.size() - 2];
             prev.pdfReverseArea =
                 pdfAreaFromVertexToDirection(curr, sample.wi, prev) * rrProb;
+        }
+        if (sample.isDelta) {
+            hasDeltaAncestor = true;
         }
         pendingPdfW = sample.pdf * rrProb;
 
@@ -416,7 +430,8 @@ Vector3f VCM::generateCameraPath(const Ray &cameraRay,
             dVC *= cosOut;
             dVM *= cosOut;
         } else {
-            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + misVmWeightFactor);
+            float vmCompetition = causticOnlyMerging ? 0.0f : misVmWeightFactor;
+            dVC = (cosOut / pdfFwd) * (dVC * pdfRev + dVCM + vmCompetition);
             dVM = (cosOut / pdfFwd) * (dVM * pdfRev + dVCM * misVcWeightFactor + 1.0f);
             dVCM = 1.0f / pdfFwd;
         }
@@ -676,15 +691,25 @@ float VCM::vcMisWeight(const VCMPathVertex &eye,
 
     float cameraPdfA = cameraPdfW * connection.cosThetaLight / connection.dist2;
     float lightPdfA = lightPdfW * connection.cosThetaEye / connection.dist2;
+    float vmCompetition = vmCompetitionWeight(&light);
 
     float wLight = cameraPdfA *
-        (misVmWeightFactor + light.dVCM + light.dVC * lightRevPdfW);
+        (vmCompetition + light.dVCM + light.dVC * lightRevPdfW);
 
     float wCamera = lightPdfA *
-        (misVmWeightFactor + eye.dVCM + eye.dVC * cameraRevPdfW);
+        (vmCompetition + eye.dVCM + eye.dVC * cameraRevPdfW);
 
     float misWeight = 1.0f / (1.0f + wLight + wCamera);
     return misWeight;
+}
+
+float VCM::vmCompetitionWeight(const VCMPathVertex *lightVertex) const {
+    if (!causticOnlyMerging) {
+        return misVmWeightFactor;
+    }
+    return lightVertex != nullptr && lightVertex->isCaustic
+        ? misVmWeightFactor
+        : 0.0f;
 }
 
 float VCM::cameraHitLightMisWeight(
@@ -740,7 +765,7 @@ float VCM::directLightMisWeight(const VCMPathVertex &eye,
         emissionPdfW * connection.cosThetaEye /
         (connection.dist2 * directPdfArea);
     float wCamera = emissionAreaOverDirectArea *
-        (misVmWeightFactor + eye.dVCM + eye.dVC * bsdfRevPdfW);
+        (vmCompetitionWeight() + eye.dVCM + eye.dVC * bsdfRevPdfW);
 
     float weightSum = wLight + wCamera;
     if (!std::isfinite(weightSum) || weightSum < 0.0f) {
@@ -764,7 +789,7 @@ float VCM::lightToCameraMisWeight(const VCMPathVertex &light,
         light.wo
     );
     float wLight = (cameraPdfArea / static_cast<float>(lightPathCount)) *
-        (misVmWeightFactor + light.dVCM + light.dVC * bsdfRevPdfW);
+        (vmCompetitionWeight(&light) + light.dVCM + light.dVC * bsdfRevPdfW);
 
     if (!std::isfinite(wLight) || wLight < 0.0f) {
         return 0.0f;
@@ -992,7 +1017,7 @@ Vector3f VCM::traceVMOnly(size_t pathIdx, const Ray &cameraRay) {
     Vector3f L = generateCameraPath(
         cameraRay,
         cameraPath,
-        MAX_VCM_CAMERA_PATH_DEPTH,
+        maxCameraPathDepth,
         true,
         true,
         true
@@ -1017,7 +1042,7 @@ Vector3f VCM::traceVCOnly(size_t pathIdx,
     generateCameraPath(
         cameraRay,
         cameraPath,
-        MAX_VCM_CAMERA_PATH_DEPTH,
+        maxCameraPathDepth,
         false,
         false,
         true
@@ -1051,7 +1076,7 @@ Vector3f VCM::traceVCMNoMIS(size_t pathIdx,
     Vector3f L = generateCameraPath(
         cameraRay,
         cameraPath,
-        MAX_VCM_CAMERA_PATH_DEPTH,
+        maxCameraPathDepth,
         false,
         true,
         false
@@ -1083,7 +1108,7 @@ Vector3f VCM::traceVCMWithMIS(size_t pathIdx,
     Vector3f L = generateCameraPath(
         cameraRay,
         cameraPath,
-        MAX_VCM_CAMERA_PATH_DEPTH,
+        maxCameraPathDepth,
         false,
         true,
         true

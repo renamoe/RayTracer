@@ -12,6 +12,10 @@ namespace {
 void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
               << "[-n num_samples] [-e exposure] [-pt|-bdpt|-vcm] "
+              << "[-vcm-radius radius] "
+              << "[-vcm-camera-depth depth] "
+              << "[-vcm-light-depth depth] "
+              << "[-vcm-caustic-only|-vcm-all-merging] "
               << "[-bdpt-direct samples] "
               << "[-bdpt-direct-primary samples] "
               << "[-bdpt-direct-secondary samples]" << std::endl;
@@ -86,6 +90,25 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
             config.integrator = IntegratorType::BDPT;
         } else if (arg == "-vcm") {
             config.integrator = IntegratorType::VCM;
+        } else if (arg == "-vcm-radius" || arg == "--vcm-radius") {
+            if (i + 1 >= argc || !parsePositiveFloat(argv[++i], config.vcmRadius)) {
+                std::cout << "vcm radius must be a positive number" << std::endl;
+                return false;
+            }
+        } else if (arg == "-vcm-camera-depth" || arg == "--vcm-camera-depth") {
+            if (i + 1 >= argc || !parsePositiveInt(argv[++i], config.vcmCameraPathDepth)) {
+                std::cout << "vcm camera depth must be a positive integer" << std::endl;
+                return false;
+            }
+        } else if (arg == "-vcm-light-depth" || arg == "--vcm-light-depth") {
+            if (i + 1 >= argc || !parsePositiveInt(argv[++i], config.vcmLightPathDepth)) {
+                std::cout << "vcm light depth must be a positive integer" << std::endl;
+                return false;
+            }
+        } else if (arg == "-vcm-caustic-only" || arg == "--vcm-caustic-only") {
+            config.vcmCausticOnlyMerging = true;
+        } else if (arg == "-vcm-all-merging" || arg == "--vcm-all-merging") {
+            config.vcmCausticOnlyMerging = false;
         } else if (arg == "-bdpt-direct") {
             int samples = 0;
             if (i + 1 >= argc || !parseNonNegativeInt(argv[++i], samples)) {
@@ -134,6 +157,14 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
                   << config.bdptPrimaryDirectLightSamples
                   << ", secondary="
                   << config.bdptSecondaryDirectLightSamples << std::endl;
+    }
+    if (config.integrator == IntegratorType::VCM) {
+        std::cout << "vcm base radius: " << config.vcmRadius << std::endl;
+        std::cout << "vcm depth: camera=" << config.vcmCameraPathDepth
+                  << ", light=" << config.vcmLightPathDepth << std::endl;
+        std::cout << "vcm merging: "
+                  << (config.vcmCausticOnlyMerging ? "caustic-only" : "all")
+                  << std::endl;
     }
     return true;
 }

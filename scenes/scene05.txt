@@ -1,10 +1,10 @@
 PerspectiveCamera {
-    center 0.08 0.74 2.72
+    center 0.08 0.74 2.52
     direction -0.03 -0.08 -1
     up 0 1 0
     angle 40
-    width 800
-    height 600
+    width 1920
+    height 1080
 }
 
 Lights {

@@ -30,6 +30,7 @@ struct VCMPathVertex {
 
     bool isDelta = false;
     bool isLight = false;
+    bool isCaustic = false;
 
     VCMPathVertexType type = VCMPathVertexType::Surface;
 };

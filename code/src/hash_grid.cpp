@@ -3,7 +3,9 @@
 
 #include <cmath>
 
-void HashGrid::build(float radius, const std::vector<VCMPathVertex> &lightPhotons) {
+void HashGrid::build(float radius,
+                     const std::vector<VCMPathVertex> &lightPhotons,
+                     bool causticOnly) {
     radius2 = radius * radius;
     cellSize = radius;
     invCellSize = 1.0f / radius;
@@ -14,7 +16,7 @@ void HashGrid::build(float radius, const std::vector<VCMPathVertex> &lightPhoton
 
     for (size_t i = 0; i < lightPhotons.size(); ++i) {
         const VCMPathVertex &v = lightPhotons[i];
-        if (!isMergeable(v)) {
+        if (!isMergeable(v, causticOnly)) {
             continue;
         }
         Int3 cell = cellOf(v.pos);
@@ -30,7 +32,6 @@ Int3 HashGrid::cellOf(const Vector3f &p) const {
     return {x, y, z};
 }
 
-bool HashGrid::isMergeable(const VCMPathVertex &p) const {
-    return !p.isDelta && !p.isLight;
+bool HashGrid::isMergeable(const VCMPathVertex &p, bool causticOnly) const {
+    return !p.isDelta && !p.isLight && (!causticOnly || p.isCaustic);
 }
-

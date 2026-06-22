@@ -10,10 +10,6 @@
 #include <cstddef>
 #include <vector>
 
-constexpr int MAX_VCM_CAMERA_PATH_DEPTH = 5;
-constexpr int MAX_VCM_LIGHT_PATH_DEPTH = 3;
-
-
 class VCM {
 public:
     struct FilmSplat {
@@ -25,7 +21,10 @@ public:
     explicit VCM(SceneParser &scene,
                  int primaryDirectLightSamples,
                  int secondaryDirectLightSamples,
-                 float baseRadius);
+                 float baseRadius,
+                 int maxCameraPathDepth,
+                 int maxLightPathDepth,
+                 bool causticOnlyMerging);
 
     void beginIteration(int iteration, int width, int height);
 
@@ -128,6 +127,7 @@ private:
     float vcMisWeight(const VCMPathVertex &eye,
                       const VCMPathVertex &light,
                       ConnectionGeometry &connection) const;
+    float vmCompetitionWeight(const VCMPathVertex *lightVertex = nullptr) const;
     float cameraHitLightMisWeight(int cameraIndex,
                                   const std::vector<VCMPathVertex> &cameraPath) const;
     float directLightMisWeight(const VCMPathVertex &eye,
@@ -140,6 +140,9 @@ private:
     SceneParser &scene;
     int primaryDirectLightSamples;
     int secondaryDirectLightSamples;
+    int maxCameraPathDepth;
+    int maxLightPathDepth;
+    bool causticOnlyMerging;
 
     int lightPathCount;
     float baseRadius;
