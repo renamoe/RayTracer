@@ -12,6 +12,7 @@ namespace {
 void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
               << "[-n num_samples] [-e exposure] [-pt|-bdpt|-vcm] "
+              << "[-t duration] "
               << "[-vcm-radius radius] "
               << "[-vcm-camera-depth depth] "
               << "[-vcm-light-depth depth] "
@@ -51,6 +52,31 @@ bool parsePositiveFloat(const char *text, float &value) {
     return true;
 }
 
+bool parsePositiveDurationSeconds(const char *text, double &seconds) {
+    char *end = nullptr;
+    double parsed = std::strtod(text, &end);
+    if (end == text || !std::isfinite(parsed) || parsed <= 0.0) {
+        return false;
+    }
+
+    double scale = 1.0;
+    if (*end != '\0') {
+        std::string unit(end);
+        if (unit == "s" || unit == "sec" || unit == "secs") {
+            scale = 1.0;
+        } else if (unit == "m" || unit == "min" || unit == "mins") {
+            scale = 60.0;
+        } else if (unit == "h" || unit == "hr" || unit == "hrs") {
+            scale = 3600.0;
+        } else {
+            return false;
+        }
+    }
+
+    seconds = parsed * scale;
+    return std::isfinite(seconds) && seconds > 0.0;
+}
+
 const char *integratorName(IntegratorType integrator) {
     switch (integrator) {
     case IntegratorType::PT:
@@ -82,6 +108,12 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
         } else if (arg == "-e") {
             if (i + 1 >= argc || !parsePositiveFloat(argv[++i], config.exposure)) {
                 std::cout << "exposure must be a positive number" << std::endl;
+                return false;
+            }
+        } else if (arg == "-t" || arg == "--time") {
+            if (i + 1 >= argc ||
+                !parsePositiveDurationSeconds(argv[++i], config.timeLimitSeconds)) {
+                std::cout << "time limit must be a positive duration, e.g. 100s, 2m, or 1.5h" << std::endl;
                 return false;
             }
         } else if (arg == "-pt") {
@@ -147,7 +179,12 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     config.inputFile = positionalArgs[0];
     config.outputFile = positionalArgs[1];
 
-    std::cout << "num samples per pixel: " << config.numSamples << std::endl;
+    if (config.timeLimitSeconds > 0.0) {
+        std::cout << "num samples per pixel: time-limited" << std::endl;
+        std::cout << "time limit: " << config.timeLimitSeconds << " s" << std::endl;
+    } else {
+        std::cout << "num samples per pixel: " << config.numSamples << std::endl;
+    }
     std::cout << "exposure: " << config.exposure << std::endl;
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
     if (config.integrator == IntegratorType::BDPT ||

@@ -23,6 +23,7 @@ struct RenderConfig {
     std::string outputFile;
     int numSamples = DEFAULT_NUM_SAMPLES;
     float exposure = DEFAULT_EXPOSURE;
+    double timeLimitSeconds = 0.0;
 
     int bdptPrimaryDirectLightSamples = DEFAULT_BDPT_PRIMARY_DIRECT_LIGHT_SAMPLES;
     int bdptSecondaryDirectLightSamples = DEFAULT_BDPT_SECONDARY_DIRECT_LIGHT_SAMPLES;
