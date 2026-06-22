@@ -1,4 +1,5 @@
 #include "bdpt.hpp"
+#include "Vector3f.h"
 #include "bsdf.hpp"
 #include "camera.hpp"
 #include "group.hpp"
@@ -23,6 +24,15 @@ constexpr float MAX_CONNECTION_GEOMETRY_TERM = 1e4f;
 constexpr int RR_START_DEPTH = 2;
 constexpr float RR_MIN_CONTINUE = 0.05f;
 constexpr float RR_MAX_CONTINUE = 0.95f;
+constexpr float DELTA_HIT_LIGHT_MAX_LUMINANCE = 20.0f;
+
+Vector3f clampLuminance(const Vector3f &c, float maxLum) {
+    float lum = 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
+    if (lum > maxLum && lum > 0.0f) {
+        return c * (maxLum / lum);
+    }
+    return c;
+}
 
 float rrContinueProbability(const Vector3f &beta) {
     float maxComp = std::max(beta.x(), std::max(beta.y(), beta.z()));
@@ -715,9 +725,12 @@ Vector3f BDPT::estimateCameraHitLight(int ci, bool includeLightTracingMis) const
         return contribution;
     }
 
-    const PathVertex &prev = cameraPath[ci - 1];
-    if (prev.isDelta) {
-        return contribution;
+    bool hasDeltaAncestor = false;
+    for (int i = 1; i < ci; ++i) {
+        if (cameraPath[i].isDelta) {
+            hasDeltaAncestor = true;
+            break;
+        }
     }
 
     std::vector<PathVertex> lightVertices;
@@ -727,7 +740,13 @@ Vector3f BDPT::estimateCameraHitLight(int ci, bool includeLightTracingMis) const
     );
 
     float wBsdf = bdptMisWeight(lightVertices, cameraVertices, 0, ci + 1);
-    return contribution * wBsdf;
+    Vector3f result = contribution * wBsdf;
+
+    if (hasDeltaAncestor) {
+        result = clampLuminance(result, DELTA_HIT_LIGHT_MAX_LUMINANCE);
+    }
+
+    return result;
 }
 
 Vector3f BDPT::trace(const Ray &cameraRay) {

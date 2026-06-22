@@ -20,6 +20,16 @@ constexpr int RR_START_DEPTH = 2;
 constexpr float RR_MIN_CONTINUE = 0.05f;
 constexpr float RR_MAX_CONTINUE = 0.95f;
 constexpr float ALPHA = 0.7f;
+constexpr float DELTA_HIT_LIGHT_MAX_LUMINANCE = 20.0f;
+
+Vector3f clampLuminance(const Vector3f &c, float maxLum) {
+    float lum = 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
+    if (lum > maxLum && lum > 0.0f) {
+        return c * (maxLum / lum);
+    }
+    return c;
+}
+
 
 float rrContinueProbability(const Vector3f &beta) {
     float maxComp = std::max(beta.x(), std::max(beta.y(), beta.z()));
@@ -1008,13 +1018,22 @@ Vector3f VCM::estimateCameraHitLight(int ci,
         return contribution;
     }
 
-    const VCMPathVertex &prev = cameraPath[ci - 1];
-    if (prev.isDelta) {
-        return contribution;
+    bool hasDeltaAncestor = false;
+    for (int i = 1; i < ci; ++i) {
+        if (cameraPath[i].isDelta) {
+            hasDeltaAncestor = true;
+            break;
+        }
     }
 
     float wBsdf = useMis ? cameraHitLightMisWeight(ci, cameraPath) : 1.0f;
-    return contribution * wBsdf;
+    Vector3f result = contribution * wBsdf;
+
+    if (hasDeltaAncestor) {
+        result = clampLuminance(result, DELTA_HIT_LIGHT_MAX_LUMINANCE);
+    }
+
+    return result;
 }
 
 Vector3f VCM::trace(size_t pathIdx, const Ray &cameraRay) {
