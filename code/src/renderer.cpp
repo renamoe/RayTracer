@@ -4,16 +4,20 @@
 #include "bdpt.hpp"
 #include "camera.hpp"
 #include "path_tracer.hpp"
+#include "preview_window.hpp"
 #include "progress.hpp"
 #include "random.hpp"
 #include "scene_parser.hpp"
 #include "tone_mapping.hpp"
 #include "vcm.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #ifdef _OPENMP
@@ -21,6 +25,40 @@
 #endif
 
 namespace {
+
+volatile std::sig_atomic_t gSignalInterrupted = 0;
+
+void handleRenderSignal(int) {
+    gSignalInterrupted = 1;
+}
+
+bool signalInterrupted() {
+    return gSignalInterrupted != 0;
+}
+
+class RenderInterruptGuard {
+public:
+    RenderInterruptGuard() {
+        gSignalInterrupted = 0;
+        previousInt = std::signal(SIGINT, handleRenderSignal);
+        previousTerm = std::signal(SIGTERM, handleRenderSignal);
+    }
+
+    ~RenderInterruptGuard() {
+        if (previousInt != SIG_ERR) {
+            std::signal(SIGINT, previousInt);
+        }
+        if (previousTerm != SIG_ERR) {
+            std::signal(SIGTERM, previousTerm);
+        }
+    }
+
+private:
+    using SignalHandler = void (*)(int);
+
+    SignalHandler previousInt = SIG_DFL;
+    SignalHandler previousTerm = SIG_DFL;
+};
 
 const char *integratorName(IntegratorType integrator) {
     switch (integrator) {
@@ -67,12 +105,122 @@ void printTimedIteration(int completedIterations,
               << ", elapsed " << elapsed << "/" << timeLimitSeconds << " s\n";
 }
 
+std::unique_ptr<PreviewWindow> createPreviewWindow(const RenderConfig &config,
+                                                   int width,
+                                                   int height) {
+    if (!config.preview) {
+        return nullptr;
+    }
+
+    std::unique_ptr<PreviewWindow> preview =
+        std::make_unique<PreviewWindow>(width, height);
+    if (!preview->isOpen()) {
+        return nullptr;
+    }
+    return preview;
+}
+
+void updatePreview(PreviewWindow *preview,
+                   const RenderConfig &config,
+                   const std::vector<Vector3f> &accumulated,
+                   const std::vector<Vector3f> *splatAccumulated,
+                   int completedIterations) {
+    if (preview == nullptr || !preview->isOpen()) {
+        return;
+    }
+    preview->update(
+        accumulated,
+        splatAccumulated,
+        completedIterations,
+        config.exposure
+    );
+}
+
+void updatePreviewIfNeeded(PreviewWindow *preview,
+                           const RenderConfig &config,
+                           const std::vector<Vector3f> &accumulated,
+                           const std::vector<Vector3f> *splatAccumulated,
+                           int completedIterations) {
+    const int interval = config.previewEveryIterations > 0
+        ? config.previewEveryIterations
+        : 1;
+    if (completedIterations % interval != 0) {
+        return;
+    }
+    updatePreview(
+        preview,
+        config,
+        accumulated,
+        splatAccumulated,
+        completedIterations
+    );
+}
+
+bool cancellationRequested(std::atomic_bool &cancelRequested) {
+    if (signalInterrupted()) {
+        cancelRequested.store(true);
+    }
+    return cancelRequested.load();
+}
+
+bool refreshCancellationFromPreview(PreviewWindow *preview,
+                                    std::atomic_bool &cancelRequested) {
+    if (preview != nullptr && !preview->isOpen()) {
+        cancelRequested.store(true);
+    }
+    return cancellationRequested(cancelRequested);
+}
+
+bool pollPreviewEventsDuringWork(PreviewWindow *preview,
+                                 std::atomic_bool &cancelRequested) {
+    if (cancellationRequested(cancelRequested)) {
+        return true;
+    }
+#ifdef _OPENMP
+    if (omp_in_parallel() && omp_get_thread_num() != 0) {
+        return cancelRequested.load();
+    }
+#endif
+    if (preview != nullptr && preview->isOpen()) {
+        preview->pollEvents();
+    }
+    return refreshCancellationFromPreview(preview, cancelRequested);
+}
+
+void writeToneMappedImage(Image &image,
+                          const std::vector<Vector3f> &accumulated,
+                          const std::vector<Vector3f> *splatAccumulated,
+                          int width,
+                          int height,
+                          int completedIterations,
+                          float exposure) {
+    if (completedIterations <= 0) {
+        image.SetAllPixels(Vector3f::ZERO);
+        return;
+    }
+
+    const float invIterations = 1.0f / static_cast<float>(completedIterations);
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            size_t index = static_cast<size_t>(y) * width + x;
+            Vector3f color = accumulated[index];
+            if (splatAccumulated != nullptr) {
+                color += (*splatAccumulated)[index];
+            }
+            color = toneMap(color * invIterations, exposure);
+            image.SetPixel(x, y, color);
+        }
+    }
+}
+
 } // namespace
 
 Renderer::Renderer(SceneParser &scene, const RenderConfig &config)
     : scene(scene), config(config) {}
 
 Image Renderer::render() {
+    RenderInterruptGuard interruptGuard;
+
     if (config.integrator == IntegratorType::VCM) {
         return renderVCM();
     }
@@ -101,26 +249,43 @@ Image Renderer::render() {
     } else {
         progress.start();
     }
+    std::unique_ptr<PreviewWindow> preview =
+        createPreviewWindow(config, width, height);
+    std::atomic_bool cancelRequested(false);
 
     int completedIterations = 0;
     double lastIterationSeconds = 0.0;
-    while (shouldStartIteration(config, completedIterations, renderStart)) {
+    while (!cancellationRequested(cancelRequested) &&
+           shouldStartIteration(config, completedIterations, renderStart)) {
         const auto iterationStart = std::chrono::steady_clock::now();
 
         #pragma omp parallel for schedule(dynamic, 1)
         for (int x = 0; x < width; ++x) {
+            if (cancellationRequested(cancelRequested)) {
+                continue;
+            }
             PathTracer pathTracer(scene);
+            int renderedRows = 0;
             for (int y = 0; y < height; ++y) {
+                if ((y & 15) == 0 && cancellationRequested(cancelRequested)) {
+                    break;
+                }
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
 
                 size_t index = static_cast<size_t>(y) * width + x;
                 accumulated[index] += pathTracer.trace(ray);
+                ++renderedRows;
             }
-            if (!timed) {
-                progress.advance(height);
+            if (!timed && renderedRows > 0) {
+                progress.advance(renderedRows);
             }
+            pollPreviewEventsDuringWork(preview.get(), cancelRequested);
+        }
+
+        if (cancellationRequested(cancelRequested)) {
+            break;
         }
 
         ++completedIterations;
@@ -135,20 +300,39 @@ Image Renderer::render() {
                 config.timeLimitSeconds
             );
         }
-    }
-
-    for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-            size_t index = static_cast<size_t>(y) * width + x;
-            Vector3f color = accumulated[index] /
-                static_cast<float>(completedIterations);
-            color = toneMap(color, config.exposure);
-            image.SetPixel(x, y, color);
+        updatePreviewIfNeeded(
+            preview.get(),
+            config,
+            accumulated,
+            nullptr,
+            completedIterations
+        );
+        if (refreshCancellationFromPreview(preview.get(), cancelRequested)) {
+            break;
         }
     }
+
+    if (!cancellationRequested(cancelRequested)) {
+        updatePreview(preview.get(), config, accumulated, nullptr, completedIterations);
+        refreshCancellationFromPreview(preview.get(), cancelRequested);
+    }
+    writeToneMappedImage(
+        image,
+        accumulated,
+        nullptr,
+        width,
+        height,
+        completedIterations,
+        config.exposure
+    );
     const auto renderEnd = std::chrono::steady_clock::now();
-    if (!timed) {
+    const bool cancelled = cancellationRequested(cancelRequested);
+    if (!timed && !cancelled) {
         progress.finish();
+    }
+    if (cancelled) {
+        std::cout << "\n[render] cancelled after " << completedIterations
+                  << " completed iteration(s)\n";
     }
 
     const double renderSeconds =
@@ -186,22 +370,33 @@ Image Renderer::renderBDPT() {
     } else {
         progress.start();
     }
+    std::unique_ptr<PreviewWindow> preview =
+        createPreviewWindow(config, width, height);
+    std::atomic_bool cancelRequested(false);
     const float splatScale = 1.0f / static_cast<float>(numPixels);
 
     int completedIterations = 0;
     double lastIterationSeconds = 0.0;
-    while (shouldStartIteration(config, completedIterations, renderStart)) {
+    while (!cancellationRequested(cancelRequested) &&
+           shouldStartIteration(config, completedIterations, renderStart)) {
         const auto iterationStart = std::chrono::steady_clock::now();
 
         #pragma omp parallel for schedule(dynamic, 1)
         for (int x = 0; x < width; ++x) {
+            if (cancellationRequested(cancelRequested)) {
+                continue;
+            }
             BDPT bdpt(
                 scene,
                 config.bdptPrimaryDirectLightSamples,
                 config.bdptSecondaryDirectLightSamples
             );
             std::vector<BDPT::FilmSplat> splats;
+            int renderedRows = 0;
             for (int y = 0; y < height; ++y) {
+                if ((y & 15) == 0 && cancellationRequested(cancelRequested)) {
+                    break;
+                }
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
@@ -222,10 +417,16 @@ Image Renderer::renderBDPT() {
 
                 size_t index = static_cast<size_t>(y) * width + x;
                 accumulated[index] += color;
+                ++renderedRows;
             }
-            if (!timed) {
-                progress.advance(height);
+            if (!timed && renderedRows > 0) {
+                progress.advance(renderedRows);
             }
+            pollPreviewEventsDuringWork(preview.get(), cancelRequested);
+        }
+
+        if (cancellationRequested(cancelRequested)) {
+            break;
         }
 
         ++completedIterations;
@@ -240,21 +441,46 @@ Image Renderer::renderBDPT() {
                 config.timeLimitSeconds
             );
         }
-    }
-
-    for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-            size_t index = static_cast<size_t>(y) * width + x;
-            Vector3f color = (accumulated[index] + splatAccumulated[index]) /
-                static_cast<float>(completedIterations);
-            color = toneMap(color, config.exposure);
-            image.SetPixel(x, y, color);
+        updatePreviewIfNeeded(
+            preview.get(),
+            config,
+            accumulated,
+            &splatAccumulated,
+            completedIterations
+        );
+        if (refreshCancellationFromPreview(preview.get(), cancelRequested)) {
+            break;
         }
     }
 
+    if (!cancellationRequested(cancelRequested)) {
+        updatePreview(
+            preview.get(),
+            config,
+            accumulated,
+            &splatAccumulated,
+            completedIterations
+        );
+        refreshCancellationFromPreview(preview.get(), cancelRequested);
+    }
+    writeToneMappedImage(
+        image,
+        accumulated,
+        &splatAccumulated,
+        width,
+        height,
+        completedIterations,
+        config.exposure
+    );
+
     const auto renderEnd = std::chrono::steady_clock::now();
-    if (!timed) {
+    const bool cancelled = cancellationRequested(cancelRequested);
+    if (!timed && !cancelled) {
         progress.finish();
+    }
+    if (cancelled) {
+        std::cout << "\n[render] cancelled after " << completedIterations
+                  << " completed iteration(s)\n";
     }
 
     const double renderSeconds =
@@ -292,6 +518,9 @@ Image Renderer::renderVCM() {
     } else {
         progress.start();
     }
+    std::unique_ptr<PreviewWindow> preview =
+        createPreviewWindow(config, width, height);
+    std::atomic_bool cancelRequested(false);
     const float splatScale = 1.0f / static_cast<float>(numPixels);
     VCM vcm(
         scene,
@@ -304,14 +533,33 @@ Image Renderer::renderVCM() {
     );
     int completedIterations = 0;
     double lastIterationSeconds = 0.0;
-    while (shouldStartIteration(config, completedIterations, renderStart)) {
+    while (!cancellationRequested(cancelRequested) &&
+           shouldStartIteration(config, completedIterations, renderStart)) {
         const auto iterationStart = std::chrono::steady_clock::now();
-        vcm.beginIteration(completedIterations, width, height);
+        bool iterationReady = vcm.beginIteration(
+            completedIterations,
+            width,
+            height,
+            [&preview, &cancelRequested]() {
+                return pollPreviewEventsDuringWork(preview.get(), cancelRequested);
+            }
+        );
+        if (!iterationReady || cancellationRequested(cancelRequested)) {
+            cancelRequested.store(true);
+            break;
+        }
 
         #pragma omp parallel for schedule(dynamic, 1)
         for (int x = 0; x < width; ++x) {
+            if (cancellationRequested(cancelRequested)) {
+                continue;
+            }
             std::vector<VCM::FilmSplat> splats;
+            int renderedRows = 0;
             for (int y = 0; y < height; ++y) {
+                if ((y & 15) == 0 && cancellationRequested(cancelRequested)) {
+                    break;
+                }
                 float dx = Random::get_float() - 0.5f;
                 float dy = Random::get_float() - 0.5f;
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
@@ -337,10 +585,16 @@ Image Renderer::renderVCM() {
 
                 size_t index = static_cast<size_t>(y) * width + x;
                 accumulated[index] += color;
+                ++renderedRows;
             }
-            if (!timed) {
-                progress.advance(height);
+            if (!timed && renderedRows > 0) {
+                progress.advance(renderedRows);
             }
+            pollPreviewEventsDuringWork(preview.get(), cancelRequested);
+        }
+
+        if (cancellationRequested(cancelRequested)) {
+            break;
         }
 
         ++completedIterations;
@@ -355,21 +609,46 @@ Image Renderer::renderVCM() {
                 config.timeLimitSeconds
             );
         }
-    }
-
-    for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-            size_t index = static_cast<size_t>(y) * width + x;
-            Vector3f color = (accumulated[index] + splatAccumulated[index]) /
-                static_cast<float>(completedIterations);
-            color = toneMap(color, config.exposure);
-            image.SetPixel(x, y, color);
+        updatePreviewIfNeeded(
+            preview.get(),
+            config,
+            accumulated,
+            &splatAccumulated,
+            completedIterations
+        );
+        if (refreshCancellationFromPreview(preview.get(), cancelRequested)) {
+            break;
         }
     }
 
+    if (!cancellationRequested(cancelRequested)) {
+        updatePreview(
+            preview.get(),
+            config,
+            accumulated,
+            &splatAccumulated,
+            completedIterations
+        );
+        refreshCancellationFromPreview(preview.get(), cancelRequested);
+    }
+    writeToneMappedImage(
+        image,
+        accumulated,
+        &splatAccumulated,
+        width,
+        height,
+        completedIterations,
+        config.exposure
+    );
+
     const auto renderEnd = std::chrono::steady_clock::now();
-    if (!timed) {
+    const bool cancelled = cancellationRequested(cancelRequested);
+    if (!timed && !cancelled) {
         progress.finish();
+    }
+    if (cancelled) {
+        std::cout << "\n[render] cancelled after " << completedIterations
+                  << " completed iteration(s)\n";
     }
 
     const double renderSeconds =
@@ -417,9 +696,15 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
     std::cout << "[render stats] total render time: " << renderSeconds << " s\n";
     std::cout << "[render stats] avg time per full-image spp: "
               << statsSeconds / completedSppForStats << " s\n";
-    std::cout << "[render stats] avg time per primary sample: "
-              << statsSeconds * 1000000.0 / static_cast<double>(primarySamples) << " us\n";
-    std::cout << "[render stats] throughput: "
-              << numPixels / statsSeconds << " pixels/s, "
-              << primarySamples / statsSeconds << " primary samples/s\n";
+    if (primarySamples > 0) {
+        std::cout << "[render stats] avg time per primary sample: "
+                  << statsSeconds * 1000000.0 / static_cast<double>(primarySamples) << " us\n";
+        std::cout << "[render stats] throughput: "
+                  << numPixels / statsSeconds << " pixels/s, "
+                  << primarySamples / statsSeconds << " primary samples/s\n";
+    } else {
+        std::cout << "[render stats] avg time per primary sample: n/a\n";
+        std::cout << "[render stats] throughput: "
+                  << numPixels / statsSeconds << " pixels/s, 0.000 primary samples/s\n";
+    }
 }

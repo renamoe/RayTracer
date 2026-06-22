@@ -20,6 +20,7 @@ SET(RayTracer_SOURCES
         src/main.cpp
         src/mesh.cpp
         src/path_tracer.cpp
+        src/preview_window.cpp
         src/plane.cpp
         src/progress.cpp
         src/ray.cpp
@@ -47,6 +48,7 @@ SET(RayTracer_INCLUDES
         include/mesh.hpp
         include/object3d.hpp
         include/path_tracer.hpp
+        include/preview_window.hpp
         include/plane.hpp
         include/progress.hpp
         include/ray.hpp
@@ -70,3 +72,31 @@ ADD_EXECUTABLE(${PROJECT_NAME} ${RayTracer_SOURCES} ${RayTracer_INCLUDES})
 find_package(OpenMP REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX vecmath)
 TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE include)
+
+option(RAYTRACER_ENABLE_PREVIEW "Enable SDL2 realtime preview window" ON)
+if(RAYTRACER_ENABLE_PREVIEW)
+    find_package(SDL2 QUIET)
+    if(SDL2_FOUND)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE RAYTRACER_ENABLE_PREVIEW)
+        if(TARGET SDL2::SDL2)
+            target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2)
+        else()
+            target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
+            target_link_libraries(${PROJECT_NAME} PRIVATE ${SDL2_LIBRARIES})
+        endif()
+    else()
+        find_package(PkgConfig QUIET)
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(SDL2_PKG QUIET sdl2)
+        endif()
+
+        if(SDL2_PKG_FOUND)
+            target_compile_definitions(${PROJECT_NAME} PRIVATE RAYTRACER_ENABLE_PREVIEW)
+            target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_PKG_INCLUDE_DIRS})
+            target_compile_options(${PROJECT_NAME} PRIVATE ${SDL2_PKG_CFLAGS_OTHER})
+            target_link_libraries(${PROJECT_NAME} PRIVATE ${SDL2_PKG_LDFLAGS})
+        else()
+            message(WARNING "SDL2 not found; realtime preview support will be disabled.")
+        endif()
+    endif()
+endif()

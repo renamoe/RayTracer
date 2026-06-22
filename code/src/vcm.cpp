@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 namespace {
@@ -77,7 +78,10 @@ VCM::VCM(SceneParser &scene,
       baseRadius(baseRadius) {
 }
 
-void VCM::beginIteration(int iteration, int width, int height) {
+bool VCM::beginIteration(int iteration,
+                         int width,
+                         int height,
+                         const std::function<bool()> &progressCallback) {
     lightPathCount = width * height;
 
     pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
@@ -94,11 +98,25 @@ void VCM::beginIteration(int iteration, int width, int height) {
 
     pathHeads.resize(lightPathCount + 1);
     for (int i = 0; i < lightPathCount; ++i) {
+        if (progressCallback && (i & 1023) == 0 && progressCallback()) {
+            return false;
+        }
         generateLightPath(i, maxLightPathDepth);
     }
     pathHeads[lightPathCount] = lightPhotons.size();
 
-    photonHashGrid.build(pmRadius, lightPhotons, causticOnlyMerging);
+    if (progressCallback && progressCallback()) {
+        return false;
+    }
+    if (!photonHashGrid.build(
+        pmRadius,
+        lightPhotons,
+        causticOnlyMerging,
+        progressCallback
+    )) {
+        return false;
+    }
+    return !(progressCallback && progressCallback());
 }
 
 void VCM::generateLightPath(size_t pathIdx, int maxDepth) {

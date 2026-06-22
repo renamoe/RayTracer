@@ -4,8 +4,9 @@
 #include "path_vertex.hpp"
 
 #include <cstddef>
-#include <vector>
+#include <functional>
 #include <unordered_map>
+#include <vector>
 
 struct Int3 {
     int x, y, z;
@@ -36,9 +37,10 @@ public:
     HashGrid() = default;
     ~HashGrid() = default;
 
-    void build(float radius,
+    bool build(float radius,
                const std::vector<VCMPathVertex> &vertices,
-               bool causticOnly);
+               bool causticOnly,
+               const std::function<bool()> &progressCallback = nullptr);
 
     template<class Callback>
     void query(const Vector3f &p, Callback &&callback) const {

@@ -2,10 +2,12 @@
 #include "path_vertex.hpp"
 
 #include <cmath>
+#include <functional>
 
-void HashGrid::build(float radius,
+bool HashGrid::build(float radius,
                      const std::vector<VCMPathVertex> &lightPhotons,
-                     bool causticOnly) {
+                     bool causticOnly,
+                     const std::function<bool()> &progressCallback) {
     radius2 = radius * radius;
     cellSize = radius;
     invCellSize = 1.0f / radius;
@@ -15,6 +17,9 @@ void HashGrid::build(float radius,
     buckets.reserve(lightPhotons.size() * 2);
 
     for (size_t i = 0; i < lightPhotons.size(); ++i) {
+        if (progressCallback && (i & 1023) == 0 && progressCallback()) {
+            return false;
+        }
         const VCMPathVertex &v = lightPhotons[i];
         if (!isMergeable(v, causticOnly)) {
             continue;
@@ -22,6 +27,11 @@ void HashGrid::build(float radius,
         Int3 cell = cellOf(v.pos);
         buckets[cell].push_back(i);
     }
+
+    if (progressCallback && progressCallback()) {
+        return false;
+    }
+    return true;
 }
 
 

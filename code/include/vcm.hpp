@@ -8,6 +8,7 @@
 #include "path_vertex.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 class VCM {
@@ -26,7 +27,10 @@ public:
                  int maxLightPathDepth,
                  bool causticOnlyMerging);
 
-    void beginIteration(int iteration, int width, int height);
+    bool beginIteration(int iteration,
+                        int width,
+                        int height,
+                        const std::function<bool()> &progressCallback = nullptr);
 
     Vector3f trace(size_t pathIdx, const Ray &cameraRay);
     Vector3f trace(size_t pathIdx, 

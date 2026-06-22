@@ -13,6 +13,7 @@ void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
               << "[-n num_samples] [-e exposure] [-pt|-bdpt|-vcm] "
               << "[-t duration] "
+              << "[--preview] [--preview-every iterations] "
               << "[-vcm-radius radius] "
               << "[-vcm-camera-depth depth] "
               << "[-vcm-light-depth depth] "
@@ -116,6 +117,15 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
                 std::cout << "time limit must be a positive duration, e.g. 100s, 2m, or 1.5h" << std::endl;
                 return false;
             }
+        } else if (arg == "--preview" || arg == "-preview") {
+            config.preview = true;
+        } else if (arg == "--preview-every" || arg == "-preview-every") {
+            if (i + 1 >= argc ||
+                !parsePositiveInt(argv[++i], config.previewEveryIterations)) {
+                std::cout << "preview update interval must be a positive integer" << std::endl;
+                return false;
+            }
+            config.preview = true;
         } else if (arg == "-pt") {
             config.integrator = IntegratorType::PT;
         } else if (arg == "-bdpt") {
@@ -187,6 +197,10 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     }
     std::cout << "exposure: " << config.exposure << std::endl;
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
+    if (config.preview) {
+        std::cout << "preview: every " << config.previewEveryIterations
+                  << " iteration(s)" << std::endl;
+    }
     if (config.integrator == IntegratorType::BDPT ||
         config.integrator == IntegratorType::VCM) {
         std::cout << integratorName(config.integrator)
