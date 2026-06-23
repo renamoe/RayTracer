@@ -199,6 +199,10 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
         texcoords.push_back(Vector2f(attrib.texcoords[i], attrib.texcoords[i + 1]));
     }
 
+    for (size_t i = 0; i + 2 < attrib.normals.size(); i += 3) {
+        objNormals.push_back(Vector3f(attrib.normals[i], attrib.normals[i + 1], attrib.normals[i + 2]));
+    }
+
     // Copy triangles
     for (size_t s = 0; s < shapes.size(); s++) {
         size_t index_offset = 0;
@@ -212,6 +216,7 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
                     tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v_idx];
                     trig[v_idx] = idx.vertex_index;
                     trig.texcoord[v_idx] = idx.texcoord_index;
+                    trig.normal[v_idx] = idx.normal_index;
                 }
                 trig.matIndex = shapes[s].mesh.material_ids[f];
                 tris.push_back(trig);
@@ -256,6 +261,17 @@ void Mesh::computeTriangleData() {
         data.centroid = (data.v0 + verts[triIndex[1]] + verts[triIndex[2]]) / 3.0f;
         data.box = AABB(data.v0, verts[triIndex[1]], verts[triIndex[2]]);
         data.material = getTriangleMaterial(triId);
+        data.hasNormals = true;
+        for (int i = 0; i < 3; ++i) {
+            int normalIndex = triIndex.normal[i];
+            if (normalIndex >= 0 && normalIndex < (int)objNormals.size()) {
+                data.vertexNormal[i] = objNormals[normalIndex].normalized();
+            } else {
+                data.vertexNormal[i] = data.normal;
+                data.hasNormals = false;
+            }
+        }
+
         data.hasTexCoords = true;
         for (int i = 0; i < 3; ++i) {
             int texcoordIndex = triIndex.texcoord[i];
@@ -341,13 +357,27 @@ bool Mesh::intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) 
     if (t < tmin || t > hit.getT()) {
         return false;
     }
+    Vector3f shadingNormal = data.normal;
+    if (data.hasNormals) {
+        shadingNormal = data.vertexNormal[0] * (1.0f - u - v) +
+                        data.vertexNormal[1] * u +
+                        data.vertexNormal[2] * v;
+        if (shadingNormal.squaredLength() > 0.0f) {
+            shadingNormal.normalize();
+            if (Vector3f::dot(shadingNormal, data.normal) < 0.0f) {
+                shadingNormal = -shadingNormal;
+            }
+        } else {
+            shadingNormal = data.normal;
+        }
+    }
     if (data.hasTexCoords) {
         Vector2f uv = data.texCoord[0] * (1.0f - u - v) +
                       data.texCoord[1] * u +
                       data.texCoord[2] * v;
-        hit.set(t, data.material, data.normal, uv);
+        hit.set(t, data.material, shadingNormal, uv);
     } else {
-        hit.set(t, data.material, data.normal);
+        hit.set(t, data.material, shadingNormal);
     }
     return true;
 }
