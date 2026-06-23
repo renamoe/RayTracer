@@ -91,8 +91,13 @@ VCM::VCM(SceneParser &scene,
 bool VCM::beginIteration(int iteration,
                          int width,
                          int height,
+                         int requestedLightPathCount,
                          const std::function<bool()> &progressCallback) {
-    lightPathCount = width * height;
+    int pixelCount = width * height;
+    lightPathCount = requestedLightPathCount > 0
+        ? requestedLightPathCount
+        : pixelCount;
+    lightPathCount = std::max(1, lightPathCount);
 
     pmRadius = baseRadius / pow(iteration + 1, 0.5f * (1.0f - ALPHA));
     // pmRadius = baseRadius;
@@ -127,6 +132,10 @@ bool VCM::beginIteration(int iteration,
         return false;
     }
     return !(progressCallback && progressCallback());
+}
+
+int VCM::getLightPathCount() const {
+    return lightPathCount;
 }
 
 void VCM::generateLightPath(size_t pathIdx, int maxDepth) {

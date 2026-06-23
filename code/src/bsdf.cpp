@@ -27,6 +27,14 @@ float specularSamplingProbability(const Vector3f &specularColor) {
     return std::max(0.05f, std::min(specularStrength, 0.75f));
 }
 
+float glassBranchProbability(float kr) {
+    constexpr float MIN_BRANCH_PROBABILITY = 0.05f;
+    return std::max(
+        MIN_BRANCH_PROBABILITY,
+        std::min(1.0f - MIN_BRANCH_PROBABILITY, kr)
+    );
+}
+
 Vector3f fresnelSchlickColor(float cosTheta, const Vector3f &F0) {
     float f = std::pow(1.0f - clamp01(cosTheta), 5.0f);
     return F0 + (Vector3f(1, 1, 1) - F0) * f;
@@ -377,16 +385,18 @@ BSDFSample sampleBSDF(Material *mat,
         float kr = canRefract 
             ? fresnelSchlick(rayDir, normal, etaI, etaT) 
             : 1.0f;
+        float reflectProb = canRefract ? glassBranchProbability(kr) : 1.0f;
 
-        if (!canRefract || Random::get_float() < kr) {
+        if (!canRefract || Random::get_float() < reflectProb) {
             result.wi = reflect(rayDir, normal);
-            result.throughputWeight = mat->getSpecularColor();
-            result.pdf = kr;
+            result.throughputWeight = mat->getSpecularColor() * (kr / reflectProb);
+            result.pdf = reflectProb;
         } else {
             float kt = 1.0f - kr;
+            float transmitProb = 1.0f - reflectProb;
             result.wi = refracted;
-            result.throughputWeight = mat->getTransmissionColor();
-            result.pdf = kt;
+            result.throughputWeight = mat->getTransmissionColor() * (kt / transmitProb);
+            result.pdf = transmitProb;
         }
         result.isDelta = true;
 

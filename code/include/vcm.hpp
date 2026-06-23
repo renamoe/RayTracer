@@ -30,7 +30,10 @@ public:
     bool beginIteration(int iteration,
                         int width,
                         int height,
+                        int requestedLightPathCount,
                         const std::function<bool()> &progressCallback = nullptr);
+
+    int getLightPathCount() const;
 
     Vector3f trace(size_t pathIdx, const Ray &cameraRay);
     Vector3f trace(size_t pathIdx, 

@@ -11,6 +11,7 @@ constexpr int DEFAULT_BDPT_SECONDARY_DIRECT_LIGHT_SAMPLES = 1;
 constexpr float DEFAULT_VCM_RADIUS = 0.01f;
 constexpr int DEFAULT_VCM_CAMERA_PATH_DEPTH = 8;
 constexpr int DEFAULT_VCM_LIGHT_PATH_DEPTH = 5;
+constexpr float DEFAULT_SAMPLE_CLAMP = 0.0f;
 
 enum class IntegratorType {
     PT,
@@ -24,6 +25,7 @@ struct RenderConfig {
     int numSamples = DEFAULT_NUM_SAMPLES;
     float exposure = DEFAULT_EXPOSURE;
     double timeLimitSeconds = 0.0;
+    float sampleClamp = DEFAULT_SAMPLE_CLAMP;
     bool preview = false;
     int previewEveryIterations = 1;
 
@@ -33,6 +35,7 @@ struct RenderConfig {
     float vcmRadius = DEFAULT_VCM_RADIUS;
     int vcmCameraPathDepth = DEFAULT_VCM_CAMERA_PATH_DEPTH;
     int vcmLightPathDepth = DEFAULT_VCM_LIGHT_PATH_DEPTH;
+    int vcmLightPathCount = 0;
     bool vcmCausticOnlyMerging = true;
 
     IntegratorType integrator = IntegratorType::PT;

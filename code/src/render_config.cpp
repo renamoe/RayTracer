@@ -13,10 +13,12 @@ void printUsage() {
     std::cout << "Usage: ./bin/RayTracer <input scene file> <output bmp file> "
               << "[-n num_samples] [-e exposure] [-pt|-bdpt|-vcm] "
               << "[-t duration] "
+              << "[--sample-clamp luminance] "
               << "[--preview] [--preview-every iterations] "
               << "[-vcm-radius radius] "
               << "[-vcm-camera-depth depth] "
               << "[-vcm-light-depth depth] "
+              << "[--vcm-light-paths count] "
               << "[-vcm-caustic-only|-vcm-all-merging] "
               << "[-bdpt-direct samples] "
               << "[-bdpt-direct-primary samples] "
@@ -47,6 +49,16 @@ bool parsePositiveFloat(const char *text, float &value) {
     char *end = nullptr;
     float parsed = std::strtof(text, &end);
     if (end == text || *end != '\0' || !std::isfinite(parsed) || parsed <= 0.0f) {
+        return false;
+    }
+    value = parsed;
+    return true;
+}
+
+bool parseNonNegativeFloat(const char *text, float &value) {
+    char *end = nullptr;
+    float parsed = std::strtof(text, &end);
+    if (end == text || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0f) {
         return false;
     }
     value = parsed;
@@ -111,6 +123,11 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
                 std::cout << "exposure must be a positive number" << std::endl;
                 return false;
             }
+        } else if (arg == "--sample-clamp" || arg == "-sample-clamp") {
+            if (i + 1 >= argc || !parseNonNegativeFloat(argv[++i], config.sampleClamp)) {
+                std::cout << "sample clamp must be a non-negative number" << std::endl;
+                return false;
+            }
         } else if (arg == "-t" || arg == "--time") {
             if (i + 1 >= argc ||
                 !parsePositiveDurationSeconds(argv[++i], config.timeLimitSeconds)) {
@@ -145,6 +162,12 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
         } else if (arg == "-vcm-light-depth" || arg == "--vcm-light-depth") {
             if (i + 1 >= argc || !parsePositiveInt(argv[++i], config.vcmLightPathDepth)) {
                 std::cout << "vcm light depth must be a positive integer" << std::endl;
+                return false;
+            }
+        } else if (arg == "-vcm-light-paths" || arg == "--vcm-light-paths") {
+            if (i + 1 >= argc ||
+                !parseNonNegativeInt(argv[++i], config.vcmLightPathCount)) {
+                std::cout << "vcm light paths must be a non-negative integer" << std::endl;
                 return false;
             }
         } else if (arg == "-vcm-caustic-only" || arg == "--vcm-caustic-only") {
@@ -196,6 +219,9 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
         std::cout << "num samples per pixel: " << config.numSamples << std::endl;
     }
     std::cout << "exposure: " << config.exposure << std::endl;
+    if (config.sampleClamp > 0.0f) {
+        std::cout << "sample clamp luminance: " << config.sampleClamp << std::endl;
+    }
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
     if (config.preview) {
         std::cout << "preview: every " << config.previewEveryIterations
@@ -213,6 +239,13 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
         std::cout << "vcm base radius: " << config.vcmRadius << std::endl;
         std::cout << "vcm depth: camera=" << config.vcmCameraPathDepth
                   << ", light=" << config.vcmLightPathDepth << std::endl;
+        std::cout << "vcm light paths: ";
+        if (config.vcmLightPathCount > 0) {
+            std::cout << config.vcmLightPathCount;
+        } else {
+            std::cout << "auto";
+        }
+        std::cout << std::endl;
         std::cout << "vcm merging: "
                   << (config.vcmCausticOnlyMerging ? "caustic-only" : "all")
                   << std::endl;

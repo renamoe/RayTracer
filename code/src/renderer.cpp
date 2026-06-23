@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cstddef>
 #include <iomanip>
@@ -187,6 +188,23 @@ bool pollPreviewEventsDuringWork(PreviewWindow *preview,
     return refreshCancellationFromPreview(preview, cancelRequested);
 }
 
+Vector3f clampLuminance(const Vector3f &color, float maxLum) {
+    if (!std::isfinite(color.x()) ||
+        !std::isfinite(color.y()) ||
+        !std::isfinite(color.z())) {
+        return Vector3f::ZERO;
+    }
+    if (maxLum <= 0.0f) {
+        return color;
+    }
+
+    float lum = 0.2126f * color.x() + 0.7152f * color.y() + 0.0722f * color.z();
+    if (lum > maxLum && lum > 0.0f) {
+        return color * (maxLum / lum);
+    }
+    return color;
+}
+
 void writeToneMappedImage(Image &image,
                           const std::vector<Vector3f> &accumulated,
                           const std::vector<Vector3f> *splatAccumulated,
@@ -275,7 +293,7 @@ Image Renderer::render() {
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
 
                 size_t index = static_cast<size_t>(y) * width + x;
-                accumulated[index] += pathTracer.trace(ray);
+                accumulated[index] += clampLuminance(pathTracer.trace(ray), config.sampleClamp);
                 ++renderedRows;
             }
             if (!timed && renderedRows > 0) {
@@ -411,12 +429,13 @@ Image Renderer::renderBDPT() {
                     size_t splatIndex = static_cast<size_t>(splat.y) * width + splat.x;
                     #pragma omp critical(bdpt_splat_accumulate)
                     {
-                        splatAccumulated[splatIndex] += splat.contribution;
+                        splatAccumulated[splatIndex] +=
+                            clampLuminance(splat.contribution, config.sampleClamp);
                     }
                 }
 
                 size_t index = static_cast<size_t>(y) * width + x;
-                accumulated[index] += color;
+                accumulated[index] += clampLuminance(color, config.sampleClamp);
                 ++renderedRows;
             }
             if (!timed && renderedRows > 0) {
@@ -540,6 +559,7 @@ Image Renderer::renderVCM() {
             completedIterations,
             width,
             height,
+            config.vcmLightPathCount,
             [&preview, &cancelRequested]() {
                 return pollPreviewEventsDuringWork(preview.get(), cancelRequested);
             }
@@ -565,11 +585,18 @@ Image Renderer::renderVCM() {
                 Ray ray = scene.getCamera()->generateRay(Vector2f(x + dx, y + dy));
 
                 size_t pathIdx = static_cast<size_t>(y) * width + x;
+                int lightPathCount = vcm.getLightPathCount();
+                size_t lightPathIdx = lightPathCount > 0
+                    ? (pathIdx +
+                       static_cast<size_t>(completedIterations) *
+                       static_cast<size_t>(numPixels)) %
+                       static_cast<size_t>(lightPathCount)
+                    : pathIdx;
                 // Vector3f color = vcm.traceVMOnly(pathIdx, ray);
                 // Vector3f color = vcm.traceVCOnly(pathIdx, ray);
                 // Vector3f color = vcm.traceVCMNoMIS(pathIdx, ray);
                 splats.clear();
-                Vector3f color = vcm.trace(pathIdx, ray, &splats, splatScale);
+                Vector3f color = vcm.trace(lightPathIdx, ray, &splats, splatScale);
                 for (const VCM::FilmSplat &splat : splats) {
                     if (splat.x < 0 || splat.x >= width ||
                         splat.y < 0 || splat.y >= height) {
@@ -578,13 +605,14 @@ Image Renderer::renderVCM() {
                     size_t splatIndex = static_cast<size_t>(splat.y) * width + splat.x;
                     #pragma omp critical(vcm_splat_accumulate)
                     {
-                        splatAccumulated[splatIndex] += splat.contribution;
+                        splatAccumulated[splatIndex] +=
+                            clampLuminance(splat.contribution, config.sampleClamp);
                     }
                 }
 
 
                 size_t index = static_cast<size_t>(y) * width + x;
-                accumulated[index] += color;
+                accumulated[index] += clampLuminance(color, config.sampleClamp);
                 ++renderedRows;
             }
             if (!timed && renderedRows > 0) {
@@ -686,8 +714,15 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
         std::cout << ", vcm base radius: " << config.vcmRadius
                   << ", vcm depth: camera=" << config.vcmCameraPathDepth
                   << ", light=" << config.vcmLightPathDepth
+                  << ", light paths="
+                  << (config.vcmLightPathCount > 0
+                      ? config.vcmLightPathCount
+                      : static_cast<int>(numPixels))
                   << ", vcm merging: "
                   << (config.vcmCausticOnlyMerging ? "caustic-only" : "all");
+    }
+    if (config.sampleClamp > 0.0f) {
+        std::cout << ", sample clamp: " << config.sampleClamp;
     }
 #ifdef _OPENMP
     std::cout << ", threads: " << omp_get_max_threads();

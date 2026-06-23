@@ -13,8 +13,22 @@
 
 namespace {
 
-constexpr float P_RR = 0.8f;
+constexpr float P_RR = 0.95f;
+constexpr int RR_START_DEPTH = 2;
 constexpr int MAX_DEPTH = 8;
+constexpr float DELTA_SPECULAR_MAX_LUMINANCE = 20.0f;
+
+float rrProbability(int depth) {
+    return depth >= RR_START_DEPTH ? P_RR : 1.0f;
+}
+
+Vector3f clampLuminance(const Vector3f &c, float maxLum) {
+    float lum = 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
+    if (lum > maxLum && lum > 0.0f) {
+        return c * (maxLum / lum);
+    }
+    return c;
+}
 
 } // namespace
 
@@ -82,16 +96,20 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Vector3f R = reflect(ray.getDirection(), shadingNormal);
 
         if (material->getRoughness() <= DELTA_MIRROR_ROUGHNESS) {
-            if (Random::get_float() > P_RR) {
+            float rrProb = rrProbability(depth);
+            if (Random::get_float() > rrProb) {
                 return emission;
             }
             Vector3f offsetNormal = Vector3f::dot(R, normal) > 0 ? normal : -normal;
             Ray nextRay(pos + offsetNormal * 1e-6, R);
-            return emission + trace(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
+            Vector3f bounced =
+                trace(nextRay, depth + 1, true) * material->getSpecularColor() / rrProb;
+            return emission + clampLuminance(bounced, DELTA_SPECULAR_MAX_LUMINANCE);
         }
 
         Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, ray.getDirection(), material);
-        if (Random::get_float() > P_RR) {
+        float rrProb = rrProbability(depth);
+        if (Random::get_float() > rrProb) {
             return emission + direct;
         }
 
@@ -120,7 +138,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             float pdfLight = scene.lightPdfFromHit(nextHit, wi);
             float wBrdf = powerHeuristic(sample.pdf, pdfLight);
 
-            brdfLight = nextHit.getMaterial()->getEmission() * glossyBRDF * cosTheta / std::max(sample.pdf, 1e-6f) * wBrdf / P_RR;
+            brdfLight = nextHit.getMaterial()->getEmission() * glossyBRDF * cosTheta / std::max(sample.pdf, 1e-6f) * wBrdf / rrProb;
         }
 
         Vector3f indirect = Vector3f::ZERO;
@@ -128,34 +146,27 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             Vector3f incoming = nextIntersects
                 ? traceFromHit(nextRay, nextHit, depth + 1)
                 : scene.getBackgroundColor();
-            indirect = incoming * glossyBRDF * cosTheta / (sample.pdf * P_RR);
+            indirect = incoming * glossyBRDF * cosTheta / (sample.pdf * rrProb);
         }
 
         return emission + direct + brdfLight + indirect;
     }
 
     if (material->isGlass()) {
-        if (Random::get_float() > P_RR) {
+        float rrProb = rrProbability(depth);
+        if (Random::get_float() > rrProb) {
             return emission;
         }
 
-        Vector3f reflected = reflect(ray.getDirection(), normal);
-
-        Vector3f refracted;
-        float etaI = 1.0f;
-        float etaT = material->getIOR();
-        bool canRefract = refract(ray.getDirection(), normal, etaI, etaT, refracted);
-        float kr = canRefract ? fresnelSchlick(ray.getDirection(), normal, etaI, etaT) : 1.0f;
-
-        if (Random::get_float() < kr) {
-            Vector3f offsetNormal = Vector3f::dot(reflected, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, reflected);
-            return emission + trace(nextRay, depth + 1, true) * material->getSpecularColor() / P_RR;
-        } else {
-            Vector3f offsetNormal = Vector3f::dot(refracted, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, refracted);
-            return emission + trace(nextRay, depth + 1, true) * material->getTransmissionColor() / P_RR;
+        BSDFSample sample = sampleBSDF(material, normal, (-ray.getDirection()).normalized());
+        if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
+            return emission;
         }
+        Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0 ? normal : -normal;
+        Ray nextRay(pos + offsetNormal * 1e-6, sample.wi);
+        Vector3f bounced =
+            trace(nextRay, depth + 1, true) * sample.throughputWeight / rrProb;
+        return emission + clampLuminance(bounced, DELTA_SPECULAR_MAX_LUMINANCE);
     }
 
     Vector3f shadingNormal = normal;
@@ -184,7 +195,8 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         }
     }
 
-    if (Random::get_float() > P_RR) {
+    float rrProb = rrProbability(depth);
+    if (Random::get_float() > rrProb) {
         return emission + direct;
     }
 
@@ -204,7 +216,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
     if (hitLight) {
         float pdfLight = scene.lightPdfFromHit(nextHit, bsdfSample.wi);
         float wBrdf = powerHeuristic(bsdfSample.pdf, pdfLight);
-        brdfLight = nextHit.getMaterial()->getEmission() * bsdfSample.throughputWeight * wBrdf / P_RR;
+        brdfLight = nextHit.getMaterial()->getEmission() * bsdfSample.throughputWeight * wBrdf / rrProb;
     }
 
     Vector3f indirect = Vector3f::ZERO;
@@ -212,7 +224,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Vector3f incoming = nextIntersects
             ? traceFromHit(nextRay, nextHit, depth + 1)
             : scene.getBackgroundColor();
-        indirect = incoming * bsdfSample.throughputWeight / P_RR;
+        indirect = incoming * bsdfSample.throughputWeight / rrProb;
     }
 
     Vector3f result = emission + direct + brdfLight + indirect;
