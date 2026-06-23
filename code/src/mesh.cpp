@@ -174,9 +174,13 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
         MaterialType type = typeFromMtl(m);
         float roughness = roughnessFromNs(m.shininess);
         Vector3f transmissionColor = transmissionColorFromMtl(m);
+        Vector3f diffuseColor(m.diffuse[0], m.diffuse[1], m.diffuse[2]);
+        if (!m.diffuse_texname.empty() && diffuseColor.squaredLength() < 1e-6f) {
+            diffuseColor = Vector3f(1, 1, 1);
+        }
 
         auto *mat = new Material(
-            Vector3f(m.diffuse[0], m.diffuse[1], m.diffuse[2]),
+            diffuseColor,
             Vector3f(m.specular[0], m.specular[1], m.specular[2]),
             Vector3f(m.emission[0], m.emission[1], m.emission[2]),
             m.shininess,
