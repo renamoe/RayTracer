@@ -14,7 +14,8 @@
 namespace {
 
 constexpr float P_RR = 0.95f;
-constexpr float RAY_EPS = 1e-4f;
+constexpr float RAY_EPS = 1e-6f;
+constexpr float SHADOW_END_EPS = 1e-4f;
 constexpr int RR_START_DEPTH = 2;
 constexpr int MAX_DEPTH = 8;
 
@@ -61,7 +62,7 @@ Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
 
     Vector3f shadowOrigin = offsetRayOrigin(pos, normal, lightSample.dir);
     Ray shadowRay(shadowOrigin, lightSample.dir);
-    if (scene.getGroup()->occluded(shadowRay, RAY_EPS, lightSample.dist - RAY_EPS)) {
+    if (scene.getGroup()->occluded(shadowRay, RAY_EPS, lightSample.dist - SHADOW_END_EPS)) {
         return Vector3f::ZERO;
     }
 
@@ -187,7 +188,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
     if (sample.pdf > 0.0f && sample.dist > 0.0f) {
         Vector3f shadowOrigin = offsetRayOrigin(pos, normal, sample.dir);
         Ray shadowRay(shadowOrigin, sample.dir);
-        if (!scene.getGroup()->occluded(shadowRay, RAY_EPS, sample.dist - RAY_EPS)) {
+        if (!scene.getGroup()->occluded(shadowRay, RAY_EPS, sample.dist - SHADOW_END_EPS)) {
             Vector3f lightDir = sample.dir.normalized();
             float cosThetaX = std::max(0.0f, Vector3f::dot(shadingNormal, lightDir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
