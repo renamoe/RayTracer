@@ -10,17 +10,17 @@
 # http://www.graphics.cornell.edu/online/box/data.html
 #
 newmtl leftSphere
-    Ka 0.01 0.01 0.01
-    Kd 0.01 0.01 0.01
-    Ks 0.95 0.95 0.95
-    Ns 1000
-    illum 5
+    Ka 0.02 0.012 0.006
+    Kd 0.02 0.012 0.006
+    Ks 0.95 0.64 0.54
+    Ns 600
+    illum 3
     
 newmtl rightSphere
     Ka 0.01 0.01 0.01
     Kd 0.01 0.01 0.01
     Ks 0.30 0.30 0.30
-    Tf 0.10 0.10 0.10
+    Tf 1.00 0.79 0.89
     Ns 200
     Ni 2.5
     illum 7
@@ -80,7 +80,7 @@ newmtl water
 	 Ka 0.01 0.01 0.01
     Kd 0.01 0.01 0.01
     Ks 0.30 0.30 0.30
-    Tf 0.10 0.10 0.10
+    Tf 0.79 0.95 1.00
     Ns 200
     Ni 1.33
     illum 7
