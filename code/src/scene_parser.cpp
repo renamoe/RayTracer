@@ -609,7 +609,7 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
             }
         }
     } else {
-        std::cout << "warning: non-triangle area light is not support yet" << std::endl;
+        // std::cout << "warning: non-triangle area light is not support yet" << std::endl;
         Material *material = obj->getMaterial();
         if (material != nullptr && material->isEmissive()) {
             auto *trans = new Transform(parentMatrix, obj);

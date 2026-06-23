@@ -7,7 +7,9 @@
 #include <cctype>
 #include <cmath>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -56,16 +58,28 @@ std::string directoryOf(const std::string &filename) {
     return filename.substr(0, pos + 1);
 }
 
+std::mutex textureCacheMutex;
+std::unordered_map<std::string, std::weak_ptr<Texture>> textureCache;
+
 } // namespace
 
-Texture::Texture(int width, int height, std::vector<Vector3f> pixels)
+Texture::Texture(int width, int height, std::vector<unsigned char> pixels)
     : width(width), height(height), pixels(std::move(pixels)) {}
 
-Texture::Texture(int width, int height, std::vector<Vector3f> pixels, std::string filename)
+Texture::Texture(int width, int height, std::vector<unsigned char> pixels, std::string filename)
     : width(width), height(height), pixels(std::move(pixels)), filename(std::move(filename)) {}
 
 std::shared_ptr<Texture> Texture::load(const std::string &filename) {
     std::string normalized = normalizeTexturePath(filename);
+    {
+        std::lock_guard<std::mutex> lock(textureCacheMutex);
+        auto it = textureCache.find(normalized);
+        if (it != textureCache.end()) {
+            if (auto cached = it->second.lock()) {
+                return cached;
+            }
+        }
+    }
 
     int w = 0;
     int h = 0;
@@ -80,22 +94,21 @@ std::shared_ptr<Texture> Texture::load(const std::string &filename) {
         return nullptr;
     }
 
-    std::vector<Vector3f> pixels;
-    pixels.reserve(static_cast<size_t>(w) * static_cast<size_t>(h));
-    for (int i = 0; i < w * h; ++i) {
-        float r = data[3 * i + 0] / 255.0f;
-        float g = data[3 * i + 1] / 255.0f;
-        float b = data[3 * i + 2] / 255.0f;
-        pixels.emplace_back(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b));
-    }
+    size_t pixelBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
+    std::vector<unsigned char> pixels(data, data + pixelBytes);
     stbi_image_free(data);
 
-    return std::make_shared<Texture>(w, h, std::move(pixels), normalized);
+    auto texture = std::make_shared<Texture>(w, h, std::move(pixels), normalized);
+    {
+        std::lock_guard<std::mutex> lock(textureCacheMutex);
+        textureCache[normalized] = texture;
+    }
+    return texture;
 }
 
 bool Texture::isValid() const {
     return width > 0 && height > 0 &&
-           pixels.size() == static_cast<size_t>(width) * static_cast<size_t>(height);
+           pixels.size() == static_cast<size_t>(width) * static_cast<size_t>(height) * 3;
 }
 
 Vector3f Texture::sample(const Vector2f &uv) const {
@@ -117,10 +130,18 @@ Vector3f Texture::sample(const Vector2f &uv) const {
     float tx = x - static_cast<float>(x0);
     float ty = y - static_cast<float>(y0);
 
-    const Vector3f &c00 = pixels[static_cast<size_t>(y0) * width + x0];
-    const Vector3f &c10 = pixels[static_cast<size_t>(y0) * width + x1];
-    const Vector3f &c01 = pixels[static_cast<size_t>(y1) * width + x0];
-    const Vector3f &c11 = pixels[static_cast<size_t>(y1) * width + x1];
+    auto texel = [&](int x, int y) {
+        size_t index = (static_cast<size_t>(y) * width + x) * 3;
+        float r = pixels[index + 0] / 255.0f;
+        float g = pixels[index + 1] / 255.0f;
+        float b = pixels[index + 2] / 255.0f;
+        return Vector3f(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b));
+    };
+
+    Vector3f c00 = texel(x0, y0);
+    Vector3f c10 = texel(x1, y0);
+    Vector3f c01 = texel(x0, y1);
+    Vector3f c11 = texel(x1, y1);
 
     Vector3f cx0 = c00 * (1.0f - tx) + c10 * tx;
     Vector3f cx1 = c01 * (1.0f - tx) + c11 * tx;
