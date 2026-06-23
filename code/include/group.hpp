@@ -1,6 +1,7 @@
 #pragma once
 
 #include "object3d.hpp"
+#include <atomic>
 #include <array>
 #include <mutex>
 #include <vector>
@@ -43,6 +44,6 @@ private:
     std::vector<Vector3f> objectCentroids;
     std::vector<GroupBVHNode> bvhNodes;
     std::mutex bvhMutex;
-    bool bvhDirty = true;
+    std::atomic_bool bvhDirty{true};
     int bvhRoot = -1;
 };

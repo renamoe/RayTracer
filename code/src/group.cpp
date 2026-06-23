@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 
 namespace {
 
@@ -54,7 +55,7 @@ bool Group::getBoundingBox(AABB &box) const {
 
 void Group::addObject(int index, Object3D *obj) {
     objects[index] = obj;
-    bvhDirty = true;
+    bvhDirty.store(true, std::memory_order_release);
 }
 
 int Group::getGroupSize() const {
@@ -74,12 +75,12 @@ float Group::getArea() const {
 }
 
 void Group::ensureBVH() {
-    if (!bvhDirty) {
+    if (!bvhDirty.load(std::memory_order_acquire)) {
         return;
     }
 
     std::lock_guard<std::mutex> lock(bvhMutex);
-    if (!bvhDirty) {
+    if (!bvhDirty.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -110,7 +111,7 @@ void Group::ensureBVH() {
         bvhNodes.reserve(boundedObjectIds.size() * 2);
         bvhRoot = buildBVH(0, (int)boundedObjectIds.size());
     }
-    bvhDirty = false;
+    bvhDirty.store(false, std::memory_order_release);
 }
 
 int Group::buildBVH(int start, int end) {

@@ -64,7 +64,22 @@ private:
         float cosThetaLight = 0.0f;
     };
 
-    void generateLightPath(size_t pathIdx, int maxDepth);
+    struct LightPathView {
+        const VCMPathVertex *vertices = nullptr;
+        size_t count = 0;
+
+        size_t size() const {
+            return count;
+        }
+
+        const VCMPathVertex &operator[](size_t index) const {
+            return vertices[index];
+        }
+    };
+
+    LightPathView getLightPath(size_t pathIdx) const;
+
+    void generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth);
 
     Vector3f gatherPhotons(const VCMPathVertex &v,
                            const Vector3f &cameraThroughput,
@@ -90,13 +105,13 @@ private:
                         std::vector<FilmSplat> *splats,
                         float splatScale,
                         const std::vector<VCMPathVertex> &cameraPath,
-                        const std::vector<VCMPathVertex> &lightPath,
+                        LightPathView lightPath,
                         bool useMis = true);
 
     Vector3f connectLightToCamera(int s,
                                   std::vector<FilmSplat> *splats,
                                   float splatScale,
-                                  const std::vector<VCMPathVertex> &lightPath,
+                                  LightPathView lightPath,
                                   const std::vector<VCMPathVertex> &cameraPath,
                                   bool useMis = true);
 
@@ -104,13 +119,13 @@ private:
                                 int cameraIndex, 
                                 int numSamples,
                                 const std::vector<VCMPathVertex> &cameraPath,
-                                const std::vector<VCMPathVertex> &lightPath,
+                                LightPathView lightPath,
                                 bool useMis = true) const;
 
     Vector3f estimateCameraHitLight(int ci, 
                                     bool includeLightTracingMis,
                                     const std::vector<VCMPathVertex> &cameraPath,
-                                    const std::vector<VCMPathVertex> &lightPath,
+                                    LightPathView lightPath,
                                     bool useMis = true) const;
 
     float cameraAreaPdf(const VCMPathVertex &vertex,
@@ -157,6 +172,7 @@ private:
     std::vector<VCMPathVertex> lightPhotons;
     HashGrid photonHashGrid;
     std::vector<size_t> pathHeads;
+    std::vector<size_t> pathLengths;
 
     float radius2;
     float etaVCM = 0.0f;

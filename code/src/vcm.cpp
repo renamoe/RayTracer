@@ -6,10 +6,15 @@
 #include "random.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <functional>
 #include <vector>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace {
 
@@ -109,16 +114,88 @@ bool VCM::beginIteration(int iteration,
     vmNormalization = 1.0f / etaVCM;
 
     lightPhotons.clear();
-    lightPhotons.reserve(lightPathCount * maxLightPathDepth);
 
-    pathHeads.resize(lightPathCount + 1);
-    for (int i = 0; i < lightPathCount; ++i) {
-        if (progressCallback && (i & 1023) == 0 && progressCallback()) {
-            return false;
+    int threadCount = 1;
+#ifdef _OPENMP
+    threadCount = std::max(1, omp_get_max_threads());
+#endif
+    std::vector<std::vector<VCMPathVertex>> threadPhotons(threadCount);
+    std::vector<size_t> localPathHeads(lightPathCount, 0);
+    std::vector<int> pathThreads(lightPathCount, 0);
+    pathHeads.assign(lightPathCount, 0);
+    pathLengths.assign(lightPathCount, 0);
+    std::atomic_bool cancelled(false);
+
+    #pragma omp parallel
+    {
+        int threadId = 0;
+#ifdef _OPENMP
+        threadId = omp_get_thread_num();
+#endif
+        std::vector<VCMPathVertex> &localPhotons = threadPhotons[threadId];
+        if (threadCount > 0) {
+            localPhotons.reserve(
+                (static_cast<size_t>(lightPathCount) /
+                 static_cast<size_t>(threadCount) + 1) *
+                static_cast<size_t>(maxLightPathDepth)
+            );
         }
-        generateLightPath(i, maxLightPathDepth);
+
+        std::vector<VCMPathVertex> path;
+        path.reserve(maxLightPathDepth);
+
+        #pragma omp for schedule(dynamic, 64)
+        for (int i = 0; i < lightPathCount; ++i) {
+            if (cancelled.load(std::memory_order_relaxed)) {
+                continue;
+            }
+            if (progressCallback && (i & 1023) == 0) {
+                bool shouldCancel = false;
+                #pragma omp critical(vcm_light_path_progress)
+                {
+                    shouldCancel = !cancelled.load(std::memory_order_relaxed) &&
+                        progressCallback();
+                }
+                if (shouldCancel) {
+                    cancelled.store(true, std::memory_order_relaxed);
+                    continue;
+                }
+            }
+
+            generateLightPath(path, maxLightPathDepth);
+            pathThreads[i] = threadId;
+            localPathHeads[i] = localPhotons.size();
+            pathLengths[i] = path.size();
+            if (!path.empty()) {
+                localPhotons.insert(localPhotons.end(), path.begin(), path.end());
+            }
+        }
     }
-    pathHeads[lightPathCount] = lightPhotons.size();
+
+    if (cancelled.load(std::memory_order_relaxed)) {
+        return false;
+    }
+
+    std::vector<size_t> threadBases(threadPhotons.size() + 1, 0);
+    for (size_t i = 0; i < threadPhotons.size(); ++i) {
+        threadBases[i + 1] = threadBases[i] + threadPhotons[i].size();
+    }
+
+    const size_t totalPhotons = threadBases.back();
+    lightPhotons.reserve(totalPhotons);
+    for (std::vector<VCMPathVertex> &localPhotons : threadPhotons) {
+        if (!localPhotons.empty()) {
+            lightPhotons.insert(
+                lightPhotons.end(),
+                localPhotons.begin(),
+                localPhotons.end()
+            );
+        }
+    }
+
+    for (int i = 0; i < lightPathCount; ++i) {
+        pathHeads[i] = threadBases[pathThreads[i]] + localPathHeads[i];
+    }
 
     if (progressCallback && progressCallback()) {
         return false;
@@ -138,8 +215,20 @@ int VCM::getLightPathCount() const {
     return lightPathCount;
 }
 
-void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
-    pathHeads[pathIdx] = lightPhotons.size();
+VCM::LightPathView VCM::getLightPath(size_t pathIdx) const {
+    if (pathIdx >= pathHeads.size() || pathIdx >= pathLengths.size()) {
+        return {};
+    }
+
+    size_t begin = pathHeads[pathIdx];
+    size_t count = pathLengths[pathIdx];
+    const VCMPathVertex *base = lightPhotons.empty() ? nullptr : lightPhotons.data();
+    return {base != nullptr ? base + begin : nullptr, count};
+}
+
+void VCM::generateLightPath(std::vector<VCMPathVertex> &path, int maxDepth) {
+    path.clear();
+    path.reserve(maxDepth);
 
     LightEmitSample emit = scene.sampleEmitLight();
     if (emit.pdfPos <= 0.0f || emit.pdfDir <= 0.0f ||
@@ -166,7 +255,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
     lightVertex.isLight = true;
     lightVertex.type = VCMPathVertexType::Light;
 
-    lightPhotons.push_back(lightVertex);
+    path.push_back(lightVertex);
 
     float directPdfA = emit.pdfPos;
     float emissionPdfW = emit.pdfDir;
@@ -210,7 +299,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         v.isCaustic = hasDeltaAncestor;
         v.type = VCMPathVertexType::Surface;
 
-        VCMPathVertex &p = lightPhotons.back();
+        VCMPathVertex &p = path.back();
         v.pdfForwardSolidAngle = pendingPdfW;
         v.pdfForwardArea = solidAngleToAreaPdf(
             v.pdfForwardSolidAngle,
@@ -230,7 +319,7 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
         v.dVC = dVC;
         v.dVM = dVM;
 
-        lightPhotons.push_back(v);
+        path.push_back(v);
 
         if (mat->isEmissive()) {
             break;
@@ -272,10 +361,10 @@ void VCM::generateLightPath(size_t pathIdx, int maxDepth) {
             dVCM = 1.0f / pdfFwd;
         }
 
-        VCMPathVertex &curr = lightPhotons.back();
+        VCMPathVertex &curr = path.back();
         curr.wi = sample.wi;
-        if (lightPhotons.size() >= 2) {
-            VCMPathVertex &prev = lightPhotons[lightPhotons.size() - 2];
+        if (path.size() >= 2) {
+            VCMPathVertex &prev = path[path.size() - 2];
             prev.pdfReverseArea =
                 pdfAreaFromVertexToDirection(curr, sample.wi, prev) * rrProb;
         }
@@ -837,7 +926,7 @@ float VCM::lightToCameraMisWeight(const VCMPathVertex &light,
 Vector3f VCM::connectLightToCamera(int s,
                                    std::vector<FilmSplat> *splats,
                                    float splatScale,
-                                   const std::vector<VCMPathVertex> &lightPath,
+                                   LightPathView lightPath,
                                    const std::vector<VCMPathVertex> &cameraPath,
                                    bool useMis) {
     if (splats == nullptr || s <= 1 || s > (int)lightPath.size() ||
@@ -908,7 +997,7 @@ Vector3f VCM::connectVCM(int s,
                          std::vector<FilmSplat> *splats,
                          float splatScale,
                          const std::vector<VCMPathVertex> &cameraPath,
-                         const std::vector<VCMPathVertex> &lightPath,
+                         LightPathView lightPath,
                          bool useVcMis) {
     if ((s == 0 && t == 1) || (s == 1 && t == 1)) {
         return Vector3f::ZERO;
@@ -967,8 +1056,12 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
                                   int cameraIndex,
                                   int numSamples,
                                   const std::vector<VCMPathVertex> &cameraPath,
-                                  const std::vector<VCMPathVertex> &lightPath,
+                                  LightPathView lightPath,
                                   bool useMis) const {
+    (void)cameraIndex;
+    (void)cameraPath;
+    (void)lightPath;
+
     if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
@@ -1013,9 +1106,10 @@ Vector3f VCM::estimateDirectLight(const VCMPathVertex &eye,
 Vector3f VCM::estimateCameraHitLight(int ci, 
                                      bool includeLightTracingMis,
                                      const std::vector<VCMPathVertex> &cameraPath,
-                                     const std::vector<VCMPathVertex> &lightPath,
+                                     LightPathView lightPath,
                                      bool useMis) const {
     (void)includeLightTracingMis;
+    (void)lightPath;
 
     const VCMPathVertex &light = cameraPath[ci];
     if (ci <= 0 || light.material == nullptr || !light.isLight) {
@@ -1075,15 +1169,12 @@ Vector3f VCM::traceVCOnly(size_t pathIdx,
                           const Ray &cameraRay,
                           std::vector<FilmSplat> *splats,
                           float splatScale) {
-    if (pathIdx + 1 >= pathHeads.size()) {
+    if (pathIdx >= pathHeads.size()) {
         return Vector3f::ZERO;
     }
 
     std::vector<VCMPathVertex> cameraPath;
-    std::vector<VCMPathVertex> lightPath(
-        lightPhotons.begin() + pathHeads[pathIdx],
-        lightPhotons.begin() + pathHeads[pathIdx + 1]
-    );
+    LightPathView lightPath = getLightPath(pathIdx);
 
     generateCameraPath(
         cameraRay,
@@ -1109,15 +1200,12 @@ Vector3f VCM::traceVCMNoMIS(size_t pathIdx,
                             const Ray &cameraRay,
                             std::vector<FilmSplat> *splats,
                             float splatScale) {
-    if (pathIdx + 1 >= pathHeads.size()) {
+    if (pathIdx >= pathHeads.size()) {
         return Vector3f::ZERO;
     }
 
     std::vector<VCMPathVertex> cameraPath;
-    std::vector<VCMPathVertex> lightPath(
-        lightPhotons.begin() + pathHeads[pathIdx],
-        lightPhotons.begin() + pathHeads[pathIdx + 1]
-    );
+    LightPathView lightPath = getLightPath(pathIdx);
 
     Vector3f L = generateCameraPath(
         cameraRay,
@@ -1141,15 +1229,12 @@ Vector3f VCM::traceVCMWithMIS(size_t pathIdx,
                               const Ray &cameraRay,
                               std::vector<FilmSplat> *splats,
                               float splatScale) {
-    if (pathIdx + 1 >= pathHeads.size()) {
+    if (pathIdx >= pathHeads.size()) {
         return Vector3f::ZERO;
     }
 
     std::vector<VCMPathVertex> cameraPath;
-    std::vector<VCMPathVertex> lightPath(
-        lightPhotons.begin() + pathHeads[pathIdx],
-        lightPhotons.begin() + pathHeads[pathIdx + 1]
-    );
+    LightPathView lightPath = getLightPath(pathIdx);
 
     Vector3f L = generateCameraPath(
         cameraRay,
