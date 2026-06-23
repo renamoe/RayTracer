@@ -14,6 +14,7 @@
 namespace {
 
 constexpr float P_RR = 0.95f;
+constexpr float RAY_EPS = 1e-4f;
 constexpr int RR_START_DEPTH = 2;
 constexpr int MAX_DEPTH = 8;
 
@@ -30,6 +31,12 @@ Vector3f clampLuminance(const Vector3f &c, float maxLum) {
         return c * (maxLum / lum);
     }
     return c;
+}
+
+Vector3f offsetRayOrigin(const Vector3f &pos,
+                         const Vector3f &normal,
+                         const Vector3f &dir) {
+    return pos + (Vector3f::dot(dir, normal) > 0.0f ? normal : -normal) * RAY_EPS;
 }
 
 } // namespace
@@ -52,9 +59,9 @@ Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
         return Vector3f::ZERO;
     }
 
-    Vector3f shadowOrigin = pos + normal * 1e-6;
+    Vector3f shadowOrigin = offsetRayOrigin(pos, normal, lightSample.dir);
     Ray shadowRay(shadowOrigin, lightSample.dir);
-    if (scene.getGroup()->occluded(shadowRay, 1e-6f, lightSample.dist - 1e-4f)) {
+    if (scene.getGroup()->occluded(shadowRay, RAY_EPS, lightSample.dist - RAY_EPS)) {
         return Vector3f::ZERO;
     }
 
@@ -103,8 +110,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             if (Random::get_float() > rrProb) {
                 return emission;
             }
-            Vector3f offsetNormal = Vector3f::dot(R, normal) > 0 ? normal : -normal;
-            Ray nextRay(pos + offsetNormal * 1e-6, R);
+            Ray nextRay(offsetRayOrigin(pos, normal, R), R);
             Vector3f bounced =
                 trace(nextRay, depth + 1, true) * material->getSpecularColor() / rrProb;
             return emission + clampLuminance(bounced, specularClamp);
@@ -130,10 +136,9 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             material->getSpecularColor(),
             material->getRoughness()
         );
-        Vector3f offsetNormal = Vector3f::dot(wi, normal) > 0 ? normal : -normal;
-        Ray nextRay(pos + offsetNormal * 1e-6, wi);
+        Ray nextRay(offsetRayOrigin(pos, normal, wi), wi);
         Hit nextHit;
-        bool nextIntersects = scene.getGroup()->intersect(nextRay, nextHit, 1e-6f);
+        bool nextIntersects = scene.getGroup()->intersect(nextRay, nextHit, RAY_EPS);
 
         bool hitLight = nextIntersects && nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
         Vector3f brdfLight = Vector3f::ZERO;
@@ -165,8 +170,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         if (sample.pdf <= 0.0f || sample.throughputWeight.squaredLength() <= 0.0f) {
             return emission;
         }
-        Vector3f offsetNormal = Vector3f::dot(sample.wi, normal) > 0 ? normal : -normal;
-        Ray nextRay(pos + offsetNormal * 1e-6, sample.wi);
+        Ray nextRay(offsetRayOrigin(pos, normal, sample.wi), sample.wi);
         Vector3f bounced =
             trace(nextRay, depth + 1, true) * sample.throughputWeight / rrProb;
         return emission + clampLuminance(bounced, specularClamp);
@@ -181,10 +185,9 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
     Light::SampleResult sample = scene.sampleLight(pos);
     Vector3f direct = Vector3f::ZERO;
     if (sample.pdf > 0.0f && sample.dist > 0.0f) {
-        Vector3f shadowOffsetNormal = Vector3f::dot(sample.dir, normal) > 0.0f ? normal : -normal;
-        Vector3f shadowOrigin = pos + shadowOffsetNormal * 1e-6;
+        Vector3f shadowOrigin = offsetRayOrigin(pos, normal, sample.dir);
         Ray shadowRay(shadowOrigin, sample.dir);
-        if (!scene.getGroup()->occluded(shadowRay, 1e-6f, sample.dist - 1e-4f)) {
+        if (!scene.getGroup()->occluded(shadowRay, RAY_EPS, sample.dist - RAY_EPS)) {
             Vector3f lightDir = sample.dir.normalized();
             float cosThetaX = std::max(0.0f, Vector3f::dot(shadingNormal, lightDir));
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
@@ -208,11 +211,10 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         return emission + direct;
     }
 
-    Vector3f offsetNormal = Vector3f::dot(bsdfSample.wi, normal) > 0.0f ? normal : -normal;
-    Ray nextRay(pos + offsetNormal * 1e-6, bsdfSample.wi);
+    Ray nextRay(offsetRayOrigin(pos, normal, bsdfSample.wi), bsdfSample.wi);
 
     Hit nextHit;
-    bool nextIntersects = scene.getGroup()->intersect(nextRay, nextHit, 1e-6f);
+    bool nextIntersects = scene.getGroup()->intersect(nextRay, nextHit, RAY_EPS);
 
     bool hitLight = nextIntersects && nextHit.getMaterial() != nullptr && nextHit.getMaterial()->isEmissive();
     Vector3f brdfLight = Vector3f::ZERO;
@@ -240,7 +242,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
 
 Vector3f PathTracer::trace(const Ray &ray, int depth, bool fromSpecular) {
     Hit hit;
-    if (!scene.getGroup()->intersect(ray, hit, 0)) {
+    if (!scene.getGroup()->intersect(ray, hit, RAY_EPS)) {
         return scene.getBackgroundColor();
     }
     return traceFromHit(ray, hit, depth, fromSpecular);
