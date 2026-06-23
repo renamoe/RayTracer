@@ -79,6 +79,12 @@ double elapsedSeconds(std::chrono::steady_clock::time_point start) {
     ).count();
 }
 
+long long elapsedMilliseconds(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start
+    ).count();
+}
+
 bool hasTimeLimit(const RenderConfig &config) {
     return config.timeLimitSeconds > 0.0;
 }
@@ -249,15 +255,17 @@ Image Renderer::render() {
     const bool timed = hasTimeLimit(config);
     const long long requestedPrimarySamples =
         numPixels * static_cast<long long>(config.numSamples);
-    ProgressBar progress(requestedPrimarySamples);
+    const long long progressTotal = timed
+        ? std::max(1LL, static_cast<long long>(std::ceil(config.timeLimitSeconds * 1000.0)))
+        : requestedPrimarySamples;
+    ProgressBar progress(progressTotal, timed ? "ms" : "px");
 
     const auto renderStart = std::chrono::steady_clock::now();
     if (timed) {
         std::cout << "[render] time-limited mode: " << config.timeLimitSeconds
                   << " s\n";
-    } else {
-        progress.start();
     }
+    progress.start();
     std::unique_ptr<PreviewWindow> preview =
         createPreviewWindow(config, width, height);
     std::atomic_bool cancelRequested(false);
@@ -287,7 +295,9 @@ Image Renderer::render() {
                 accumulated[index] += clampLuminance(pathTracer.trace(ray), config.sampleClamp);
                 ++renderedRows;
             }
-            if (!timed && renderedRows > 0) {
+            if (timed) {
+                progress.setProgress(std::min(progressTotal, elapsedMilliseconds(renderStart)));
+            } else if (renderedRows > 0) {
                 progress.advance(renderedRows);
             }
             pollPreviewEventsDuringWork(preview.get(), cancelRequested);
@@ -328,7 +338,7 @@ Image Renderer::render() {
     );
     const auto renderEnd = std::chrono::steady_clock::now();
     const bool cancelled = cancellationRequested(cancelRequested);
-    if (!timed && !cancelled) {
+    if (!cancelled) {
         progress.finish();
     }
     if (cancelled) {
@@ -362,15 +372,17 @@ Image Renderer::renderBDPT() {
     const bool timed = hasTimeLimit(config);
     const long long requestedPrimarySamples =
         numPixels * static_cast<long long>(config.numSamples);
-    ProgressBar progress(requestedPrimarySamples);
+    const long long progressTotal = timed
+        ? std::max(1LL, static_cast<long long>(std::ceil(config.timeLimitSeconds * 1000.0)))
+        : requestedPrimarySamples;
+    ProgressBar progress(progressTotal, timed ? "ms" : "px");
 
     const auto renderStart = std::chrono::steady_clock::now();
     if (timed) {
         std::cout << "[render] time-limited mode: " << config.timeLimitSeconds
                   << " s\n";
-    } else {
-        progress.start();
     }
+    progress.start();
     std::unique_ptr<PreviewWindow> preview =
         createPreviewWindow(config, width, height);
     std::atomic_bool cancelRequested(false);
@@ -421,7 +433,9 @@ Image Renderer::renderBDPT() {
                 accumulated[index] += clampLuminance(color, config.sampleClamp);
                 ++renderedRows;
             }
-            if (!timed && renderedRows > 0) {
+            if (timed) {
+                progress.setProgress(std::min(progressTotal, elapsedMilliseconds(renderStart)));
+            } else if (renderedRows > 0) {
                 progress.advance(renderedRows);
             }
             pollPreviewEventsDuringWork(preview.get(), cancelRequested);
@@ -469,7 +483,7 @@ Image Renderer::renderBDPT() {
 
     const auto renderEnd = std::chrono::steady_clock::now();
     const bool cancelled = cancellationRequested(cancelRequested);
-    if (!timed && !cancelled) {
+    if (!cancelled) {
         progress.finish();
     }
     if (cancelled) {
@@ -503,15 +517,17 @@ Image Renderer::renderVCM() {
     const bool timed = hasTimeLimit(config);
     const long long requestedPrimarySamples =
         numPixels * static_cast<long long>(config.numSamples);
-    ProgressBar progress(requestedPrimarySamples);
+    const long long progressTotal = timed
+        ? std::max(1LL, static_cast<long long>(std::ceil(config.timeLimitSeconds * 1000.0)))
+        : requestedPrimarySamples;
+    ProgressBar progress(progressTotal, timed ? "ms" : "px");
 
     const auto renderStart = std::chrono::steady_clock::now();
     if (timed) {
         std::cout << "[render] time-limited mode: " << config.timeLimitSeconds
                   << " s\n";
-    } else {
-        progress.start();
     }
+    progress.start();
     std::unique_ptr<PreviewWindow> preview =
         createPreviewWindow(config, width, height);
     std::atomic_bool cancelRequested(false);
@@ -590,7 +606,9 @@ Image Renderer::renderVCM() {
                 accumulated[index] += clampLuminance(color, config.sampleClamp);
                 ++renderedRows;
             }
-            if (!timed && renderedRows > 0) {
+            if (timed) {
+                progress.setProgress(std::min(progressTotal, elapsedMilliseconds(renderStart)));
+            } else if (renderedRows > 0) {
                 progress.advance(renderedRows);
             }
             pollPreviewEventsDuringWork(preview.get(), cancelRequested);
@@ -638,7 +656,7 @@ Image Renderer::renderVCM() {
 
     const auto renderEnd = std::chrono::steady_clock::now();
     const bool cancelled = cancellationRequested(cancelRequested);
-    if (!timed && !cancelled) {
+    if (!cancelled) {
         progress.finish();
     }
     if (cancelled) {

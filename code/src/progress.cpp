@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <utility>
 
 #ifndef _WIN32
 #include <sys/ioctl.h>
@@ -55,8 +56,9 @@ std::string formatDuration(double seconds) {
 
 } // namespace
 
-ProgressBar::ProgressBar(long long total)
+ProgressBar::ProgressBar(long long total, std::string unit)
     : total(total),
+      unit(std::move(unit)),
       completed(0),
       nextReportMs(0),
       interactive(outputIsInteractive()),
@@ -71,6 +73,15 @@ void ProgressBar::start() {
 
 void ProgressBar::advance(long long amount) {
     long long current = completed.fetch_add(amount) + amount;
+    printIfDue(current);
+}
+
+void ProgressBar::setProgress(long long value) {
+    completed.store(value);
+    printIfDue(value);
+}
+
+void ProgressBar::printIfDue(long long current) {
     long long elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime
     ).count();
@@ -114,7 +125,7 @@ void ProgressBar::print(long long completedPixels, bool finished) {
         out << (i < filled ? '#' : '-');
     }
     out << "] " << std::fixed << std::setprecision(1) << (fraction * 100.0) << "% "
-        << completedPixels << "/" << total << " px"
+        << completedPixels << "/" << total << " " << unit
         << " elapsed " << formatDuration(elapsed)
         << " eta " << formatDuration(eta);
 
