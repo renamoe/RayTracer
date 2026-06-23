@@ -97,15 +97,6 @@ bool shouldStartIteration(const RenderConfig &config,
     return elapsed < config.timeLimitSeconds;
 }
 
-void printTimedIteration(int completedIterations,
-                         double iterationSeconds,
-                         double elapsed,
-                         double timeLimitSeconds) {
-    std::cout << "[render] completed iteration " << completedIterations
-              << " in " << iterationSeconds << " s"
-              << ", elapsed " << elapsed << "/" << timeLimitSeconds << " s\n";
-}
-
 std::unique_ptr<PreviewWindow> createPreviewWindow(const RenderConfig &config,
                                                    int width,
                                                    int height) {
@@ -310,14 +301,6 @@ Image Renderer::render() {
         lastIterationSeconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - iterationStart
         ).count();
-        if (timed) {
-            printTimedIteration(
-                completedIterations,
-                lastIterationSeconds,
-                elapsedSeconds(renderStart),
-                config.timeLimitSeconds
-            );
-        }
         updatePreviewIfNeeded(
             preview.get(),
             config,
@@ -452,14 +435,6 @@ Image Renderer::renderBDPT() {
         lastIterationSeconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - iterationStart
         ).count();
-        if (timed) {
-            printTimedIteration(
-                completedIterations,
-                lastIterationSeconds,
-                elapsedSeconds(renderStart),
-                config.timeLimitSeconds
-            );
-        }
         updatePreviewIfNeeded(
             preview.get(),
             config,
@@ -629,14 +604,6 @@ Image Renderer::renderVCM() {
         lastIterationSeconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - iterationStart
         ).count();
-        if (timed) {
-            printTimedIteration(
-                completedIterations,
-                lastIterationSeconds,
-                elapsedSeconds(renderStart),
-                config.timeLimitSeconds
-            );
-        }
         updatePreviewIfNeeded(
             preview.get(),
             config,

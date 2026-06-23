@@ -20,4 +20,6 @@ private:
     std::atomic<long long> nextReportMs;
     std::chrono::steady_clock::time_point startTime;
     std::mutex outputMutex;
+    bool interactive;
+    long long reportIntervalMs;
 };

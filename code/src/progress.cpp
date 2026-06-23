@@ -6,7 +6,32 @@
 #include <iostream>
 #include <sstream>
 
+#ifndef _WIN32
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif
+
 namespace {
+
+bool outputIsInteractive() {
+#ifdef _WIN32
+    return true;
+#else
+    return isatty(STDOUT_FILENO);
+#endif
+}
+
+int terminalColumns() {
+#ifdef _WIN32
+    return 80;
+#else
+    winsize size{};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > 0) {
+        return size.ws_col;
+    }
+    return 80;
+#endif
+}
 
 std::string formatDuration(double seconds) {
     if (!std::isfinite(seconds) || seconds < 0.0) {
@@ -31,7 +56,11 @@ std::string formatDuration(double seconds) {
 } // namespace
 
 ProgressBar::ProgressBar(long long total)
-    : total(total), completed(0), nextReportMs(0) {}
+    : total(total),
+      completed(0),
+      nextReportMs(0),
+      interactive(outputIsInteractive()),
+      reportIntervalMs(interactive ? 250 : 5000) {}
 
 void ProgressBar::start() {
     completed.store(0);
@@ -48,7 +77,7 @@ void ProgressBar::advance(long long amount) {
 
     long long nextReport = nextReportMs.load();
     if (elapsedMs >= nextReport &&
-        nextReportMs.compare_exchange_strong(nextReport, elapsedMs + 250)) {
+        nextReportMs.compare_exchange_strong(nextReport, elapsedMs + reportIntervalMs)) {
         print(current, false);
     }
 }
@@ -58,7 +87,6 @@ void ProgressBar::finish() {
 }
 
 void ProgressBar::print(long long completedPixels, bool finished) {
-    constexpr int BAR_WIDTH = 36;
     std::lock_guard<std::mutex> lock(outputMutex);
 
     double fraction = total > 0
@@ -73,21 +101,31 @@ void ProgressBar::print(long long completedPixels, bool finished) {
         eta = 0.0;
     }
 
-    int filled = static_cast<int>(std::round(fraction * BAR_WIDTH));
-    filled = std::max(0, std::min(BAR_WIDTH, filled));
+    int barWidth = interactive ? std::min(24, std::max(8, terminalColumns() - 56)) : 20;
+    int filled = static_cast<int>(std::round(fraction * barWidth));
+    filled = std::max(0, std::min(barWidth, filled));
 
     std::ostringstream out;
-    out << "\r[render] [";
-    for (int i = 0; i < BAR_WIDTH; ++i) {
+    if (interactive) {
+        out << "\r";
+    }
+    out << "[render] [";
+    for (int i = 0; i < barWidth; ++i) {
         out << (i < filled ? '#' : '-');
     }
     out << "] " << std::fixed << std::setprecision(1) << (fraction * 100.0) << "% "
         << completedPixels << "/" << total << " px"
         << " elapsed " << formatDuration(elapsed)
-        << " eta " << formatDuration(eta) << "   ";
+        << " eta " << formatDuration(eta);
+
+    if (interactive) {
+        out << "   ";
+    } else {
+        out << "\n";
+    }
 
     std::cout << out.str() << std::flush;
-    if (finished) {
+    if (finished && interactive) {
         std::cout << "\n";
     }
 }
