@@ -1,0 +1,63 @@
+PerspectiveCamera {
+    center 3.8 2.45 4.7
+    direction -0.50 -0.13 -0.86
+    up 0.07 1 -0.02
+    angle 42
+    width 800
+    height 600
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 3
+    Material {
+        diffuseColor 1 1 1
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 1.00 0.82 0.55
+        specularColor 0 0 0
+        emission 3.0 2.1 1.3
+        shininess 0
+    }
+    Material {
+        diffuseColor 0.72 0.84 1.00
+        specularColor 0 0 0
+        emission 0.55 0.70 1.00
+        shininess 0
+    }
+}
+
+Group {
+    numObjects 3
+    MaterialIndex 0
+    TriangleMesh {
+        obj_file mesh/breakfast_room/breakfast_room.obj
+    }
+    MaterialIndex 1
+    Transform {
+        Translate -0.62 7.35 -1.9
+        XRotate 90
+        Scale 2.2 1.15 1.0
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+    MaterialIndex 2
+    Transform {
+        Translate 4.95 4.25 -0.6
+        YRotate -90
+        Scale 3.6 2.4 1.0
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+}

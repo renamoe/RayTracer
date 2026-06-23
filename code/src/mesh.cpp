@@ -56,12 +56,14 @@ MaterialType typeFromMtl(const tinyobj::material_t &m) {
     Vector3f Ke(m.emission[0], m.emission[1], m.emission[2]);
     Vector3f Ks(m.specular[0], m.specular[1], m.specular[2]);
     Vector3f Kd(m.diffuse[0], m.diffuse[1], m.diffuse[2]);
+    Vector3f Tf(m.transmittance[0], m.transmittance[1], m.transmittance[2]);
 
     if (Ke.squaredLength() > 0.0f) return MaterialType::EMISSIVE;
 
-    bool transparent = m.dissolve < 0.999f ||
-        Vector3f(m.transmittance[0], m.transmittance[1], m.transmittance[2]).squaredLength() > 0.0f;
-    if (transparent || m.illum == 4 || m.illum == 6 || m.illum == 7 || m.illum == 9) {
+    float maxTransmission = std::max(Tf.x(), std::max(Tf.y(), Tf.z()));
+    bool hasPartialTransmission = Tf.squaredLength() > 0.0f && maxTransmission < 0.999f;
+    bool transparent = m.dissolve < 0.999f || hasPartialTransmission;
+    if (transparent || m.illum == 6 || m.illum == 7 || m.illum == 9) {
         return MaterialType::GLASS;
     }
 
