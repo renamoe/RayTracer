@@ -9,7 +9,7 @@ class SceneParser;
 
 class PathTracer {
 public:
-    explicit PathTracer(SceneParser &scene);
+    explicit PathTracer(SceneParser &scene, float specularClamp = 0.0f);
 
     Vector3f trace(const Ray &ray, int depth = 0, bool fromSpecular = false);
 
@@ -21,4 +21,5 @@ private:
                                        Material *material);
 
     SceneParser &scene;
+    float specularClamp;
 };

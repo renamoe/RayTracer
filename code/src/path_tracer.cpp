@@ -16,13 +16,15 @@ namespace {
 constexpr float P_RR = 0.95f;
 constexpr int RR_START_DEPTH = 2;
 constexpr int MAX_DEPTH = 8;
-constexpr float DELTA_SPECULAR_MAX_LUMINANCE = 20.0f;
 
 float rrProbability(int depth) {
     return depth >= RR_START_DEPTH ? P_RR : 1.0f;
 }
 
 Vector3f clampLuminance(const Vector3f &c, float maxLum) {
+    if (maxLum <= 0.0f) {
+        return c;
+    }
     float lum = 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
     if (lum > maxLum && lum > 0.0f) {
         return c * (maxLum / lum);
@@ -32,7 +34,8 @@ Vector3f clampLuminance(const Vector3f &c, float maxLum) {
 
 } // namespace
 
-PathTracer::PathTracer(SceneParser &scene) : scene(scene) {}
+PathTracer::PathTracer(SceneParser &scene, float specularClamp)
+    : scene(scene), specularClamp(specularClamp) {}
 
 Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
                                                const Vector3f &normal,
@@ -104,7 +107,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             Ray nextRay(pos + offsetNormal * 1e-6, R);
             Vector3f bounced =
                 trace(nextRay, depth + 1, true) * material->getSpecularColor() / rrProb;
-            return emission + clampLuminance(bounced, DELTA_SPECULAR_MAX_LUMINANCE);
+            return emission + clampLuminance(bounced, specularClamp);
         }
 
         Vector3f direct = estimateGlossyDirectLight(pos, shadingNormal, ray.getDirection(), material);
@@ -166,7 +169,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Ray nextRay(pos + offsetNormal * 1e-6, sample.wi);
         Vector3f bounced =
             trace(nextRay, depth + 1, true) * sample.throughputWeight / rrProb;
-        return emission + clampLuminance(bounced, DELTA_SPECULAR_MAX_LUMINANCE);
+        return emission + clampLuminance(bounced, specularClamp);
     }
 
     Vector3f shadingNormal = normal;

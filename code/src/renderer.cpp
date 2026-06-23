@@ -282,7 +282,7 @@ Image Renderer::render() {
             if (cancellationRequested(cancelRequested)) {
                 continue;
             }
-            PathTracer pathTracer(scene);
+            PathTracer pathTracer(scene, config.sampleClamp);
             int renderedRows = 0;
             for (int y = 0; y < height; ++y) {
                 if ((y & 15) == 0 && cancellationRequested(cancelRequested)) {
