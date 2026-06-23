@@ -14,6 +14,7 @@
 namespace {
 
 constexpr int BVH_STACK_SIZE = 128;
+constexpr float TRIANGLE_DET_EPS = 1e-10f;
 
 std::string directoryOf(const std::string &filename) {
     std::string::size_type pos = std::string::npos;
@@ -175,8 +176,14 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
         float roughness = roughnessFromNs(m.shininess);
         Vector3f transmissionColor = transmissionColorFromMtl(m);
         Vector3f diffuseColor(m.diffuse[0], m.diffuse[1], m.diffuse[2]);
-        if (!m.diffuse_texname.empty() && diffuseColor.squaredLength() < 1e-6f) {
-            diffuseColor = Vector3f(1, 1, 1);
+        std::shared_ptr<Texture> diffuseTexture;
+        if (!m.diffuse_texname.empty()) {
+            diffuseTexture = Texture::load(resolveRelativePath(objFilename, m.diffuse_texname));
+            if (diffuseTexture != nullptr) {
+                diffuseColor = Vector3f(1, 1, 1);
+            } else if (diffuseColor.squaredLength() < 1e-6f) {
+                diffuseColor = Vector3f(1, 1, 1);
+            }
         }
 
         auto *mat = new Material(
@@ -190,8 +197,8 @@ Mesh::Mesh(const char *filename, Material *material) : Object3D(material) {
             roughness
         );
 
-        if (!m.diffuse_texname.empty()) {
-            mat->setDiffuseTexture(Texture::load(resolveRelativePath(objFilename, m.diffuse_texname)));
+        if (diffuseTexture != nullptr) {
+            mat->setDiffuseTexture(diffuseTexture);
         }
         mtl_materials.push_back(mat);
     }
@@ -345,7 +352,7 @@ bool Mesh::intersectTriangle(int triId, const Ray& ray,  Hit& hit , float tmin) 
     Vector3f D = ray.getDirection();
     Vector3f DE2 = Vector3f::cross(D, data.e2);
     float det = Vector3f::dot(data.e1, DE2);
-    if (std::abs(det) < 1e-6) {
+    if (std::abs(det) < TRIANGLE_DET_EPS) {
         return false;
     }
     float inv = 1.0f / det;
@@ -394,7 +401,7 @@ bool Mesh::occludedTriangle(int triId, const Ray& ray, float tmin, float tmax) c
     Vector3f D = ray.getDirection();
     Vector3f DE2 = Vector3f::cross(D, data.e2);
     float det = Vector3f::dot(data.e1, DE2);
-    if (std::abs(det) < 1e-6) {
+    if (std::abs(det) < TRIANGLE_DET_EPS) {
         return false;
     }
     float inv = 1.0f / det;

@@ -1,0 +1,66 @@
+PerspectiveCamera {
+    center 4.60 3.20 6.20
+    direction -0.56 -0.40 -0.77
+    up 0 1 0
+    angle 38
+    width 1920
+    height 1080
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 3
+    Material {
+        diffuseColor 0.80 0.78 0.72
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.78 0.77 0.73
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 1.00 0.92 0.78
+        specularColor 0 0 0
+        emission 4.5 3.9 3.2
+        shininess 0
+    }
+}
+
+Group {
+    numObjects 4
+    MaterialIndex 0
+    TriangleMesh {
+        obj_file mesh/ABeautifulGame/ABeautifulGame.obj
+    }
+
+    MaterialIndex 1
+    Triangle {
+        vertex0 -60.00 -0.20 70.20
+        vertex1 60.00 -0.20 70.20
+        vertex2 60.00 -0.20 -60.00
+    }
+    Triangle {
+        vertex0 -60.00 -0.20 70.20
+        vertex1 60.00 -0.20 -60.00
+        vertex2 -60.00 -0.20 -60.00
+    }
+    
+    MaterialIndex 2
+    Transform {
+        Translate 5.00 16.00 5.00
+        XRotate 90
+        Scale 10 10 10
+        TriangleMesh {
+            obj_file mesh/geodesic_classI_2.obj
+        }
+    }
+}

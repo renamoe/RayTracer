@@ -2,6 +2,12 @@
 #include "random.hpp"
 #include <cmath>
 
+namespace {
+
+constexpr float TRIANGLE_DET_EPS = 1e-10f;
+
+} // namespace
+
 Triangle::Triangle(const Vector3f& a, const Vector3f& b, const Vector3f& c, Material* m) : Object3D(m) {
     vertices[0] = a;
     vertices[1] = b;
@@ -16,7 +22,7 @@ bool Triangle::intersect(const Ray& ray,  Hit& hit , float tmin) {
     Vector3f D = ray.getDirection();
     Vector3f DE2 = Vector3f::cross(D, E2);
     float det = Vector3f::dot(E1, DE2);
-    if (std::abs(det) < 1e-6) {
+    if (std::abs(det) < TRIANGLE_DET_EPS) {
         return false;
     }
     float inv = 1.0f / det;
