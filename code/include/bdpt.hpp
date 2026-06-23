@@ -88,7 +88,10 @@ private:
                                   std::vector<FilmSplat> *splats,
                                   float splatScale);
 
-    Vector3f estimateDirectLight(const PathVertex &eye, int cameraIndex, int numSamples) const;
+    Vector3f estimateDirectLight(const PathVertex &eye,
+                                 int cameraIndex,
+                                 int numSamples,
+                                 bool includeLightTracingMis) const;
 
     Vector3f estimateCameraHitLight(int ci, bool includeLightTracingMis) const;
 
@@ -108,7 +111,8 @@ private:
                         const std::vector<PathVertex> &cameraVertices,
                         int s,
                         int t,
-                        float cameraPdfArea = 0.0f) const;
+                        float cameraPdfArea = 0.0f,
+                        bool includeLightTracingMis = true) const;
 
     SceneParser &scene;
     int primaryDirectLightSamples;

@@ -449,7 +449,8 @@ float BDPT::bdptMisWeight(const std::vector<PathVertex> &lightVertices,
                           const std::vector<PathVertex> &cameraVertices,
                           int s,
                           int t,
-                          float cameraPdfArea) const {
+                          float cameraPdfArea,
+                          bool includeLightTracingMis) const {
     if (s + t == 2) {
         return 1.0f;
     }
@@ -513,7 +514,9 @@ float BDPT::bdptMisWeight(const std::vector<PathVertex> &lightVertices,
         if (!std::isfinite(ri)) {
             return 0.0f;
         }
-        if (!camera[i].isDelta && !camera[i - 1].isDelta) {
+        bool isLightTracingStrategy = i == 1;
+        if ((includeLightTracingMis || !isLightTracingStrategy) &&
+            !camera[i].isDelta && !camera[i - 1].isDelta) {
             sumRi += ri;
         }
     }
@@ -588,7 +591,14 @@ Vector3f BDPT::connectLightToCamera(int s,
 
     std::vector<PathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
     std::vector<PathVertex> cameraVertices(1, cameraPath[0]);
-    float w = bdptMisWeight(lightVertices, cameraVertices, s, 1, pdfCameraArea);
+    float w = bdptMisWeight(
+        lightVertices,
+        cameraVertices,
+        s,
+        1,
+        pdfCameraArea,
+        true
+    );
     contribution = contribution * (w * splatScale);
     if (contribution.squaredLength() <= 0.0f || !isFiniteColor(contribution)) {
         return Vector3f::ZERO;
@@ -637,7 +647,7 @@ Vector3f BDPT::connectBDPT(int s,
         int directSamples = surfaceDepth == 0
             ? primaryDirectLightSamples
             : secondaryDirectLightSamples;
-        return estimateDirectLight(eye, ci, directSamples);
+        return estimateDirectLight(eye, ci, directSamples, includeLightTracingMis);
     }
 
     int li = s - 1;
@@ -655,7 +665,14 @@ Vector3f BDPT::connectBDPT(int s,
 
     std::vector<PathVertex> lightVertices(lightPath.begin(), lightPath.begin() + s);
     std::vector<PathVertex> cameraVertices(cameraPath.begin(), cameraPath.begin() + t);
-    float w = bdptMisWeight(lightVertices, cameraVertices, s, t);
+    float w = bdptMisWeight(
+        lightVertices,
+        cameraVertices,
+        s,
+        t,
+        0.0f,
+        includeLightTracingMis
+    );
 #if BDPT_DEBUG_MIS
     if (!std::isfinite(w) || w <= 0.0f || w > 1.0f) {
         std::cout << "bad mis weight: " << w << "\n";
@@ -667,7 +684,8 @@ Vector3f BDPT::connectBDPT(int s,
 
 Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
                                    int cameraIndex,
-                                   int numSamples) const {
+                                   int numSamples,
+                                   bool includeLightTracingMis) const {
     if (numSamples <= 0 || eye.material == nullptr || eye.isDelta || eye.isLight) {
         return Vector3f::ZERO;
     }
@@ -704,7 +722,14 @@ Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
             cameraPath.begin(),
             cameraPath.begin() + cameraIndex + 1
         );
-        float wLight = bdptMisWeight(lightVertices, cameraVertices, 1, cameraIndex + 1);
+        float wLight = bdptMisWeight(
+            lightVertices,
+            cameraVertices,
+            1,
+            cameraIndex + 1,
+            0.0f,
+            includeLightTracingMis
+        );
 
         result += c * wLight;
     }
@@ -713,8 +738,6 @@ Vector3f BDPT::estimateDirectLight(const PathVertex &eye,
 }
 
 Vector3f BDPT::estimateCameraHitLight(int ci, bool includeLightTracingMis) const {
-    (void)includeLightTracingMis;
-
     const PathVertex &light = cameraPath[ci];
     if (ci <= 0 || light.material == nullptr || !light.isLight) {
         return Vector3f::ZERO;
@@ -739,7 +762,14 @@ Vector3f BDPT::estimateCameraHitLight(int ci, bool includeLightTracingMis) const
         cameraPath.begin() + ci + 1
     );
 
-    float wBsdf = bdptMisWeight(lightVertices, cameraVertices, 0, ci + 1);
+    float wBsdf = bdptMisWeight(
+        lightVertices,
+        cameraVertices,
+        0,
+        ci + 1,
+        0.0f,
+        includeLightTracingMis
+    );
     Vector3f result = contribution * wBsdf;
 
     if (hasDeltaAncestor) {
