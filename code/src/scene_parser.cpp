@@ -608,14 +608,16 @@ void SceneParser::generateAreaLights(Object3D *obj, const Matrix4f &parentMatrix
                 lights.push_back(new AreaLight(tri));
             }
         }
-    } else {
-        // std::cout << "warning: non-triangle area light is not support yet" << std::endl;
-        Material *material = obj->getMaterial();
-        if (material != nullptr && material->isEmissive()) {
-            auto *trans = new Transform(parentMatrix, obj);
-            // aux_objects.push_back(trans);
-            // aux_sizes.push_back(0);
-            // lights.push_back(new AreaLight(trans));
+    } else if (auto *tri_obj = dynamic_cast<Triangle *>(obj)) {
+        Material *tri_mat = tri_obj->getMaterial();
+        if (tri_mat != nullptr && tri_mat->isEmissive()) {
+            Vector3f v0 = transformPoint(parentMatrix, tri_obj->vertices[0]);
+            Vector3f v1 = transformPoint(parentMatrix, tri_obj->vertices[1]);
+            Vector3f v2 = transformPoint(parentMatrix, tri_obj->vertices[2]);
+            auto *tri = new Triangle(v0, v1, v2, tri_mat);
+            aux_objects.push_back(tri);
+            aux_sizes.push_back(tri->getArea());
+            lights.push_back(new AreaLight(tri));
         }
     }
 }
