@@ -3,6 +3,8 @@
 #include "Vector2f.h"
 #include "bdpt.hpp"
 #include "camera.hpp"
+#include "group.hpp"
+#include "path_guiding.hpp"
 #include "path_tracer.hpp"
 #include "preview_window.hpp"
 #include "progress.hpp"
@@ -269,6 +271,28 @@ Image Renderer::render() {
     std::unique_ptr<PreviewWindow> preview =
         createPreviewWindow(config, width, height);
     std::atomic_bool cancelRequested(false);
+    std::unique_ptr<PathGuideGrid> pathGuideGrid;
+    if (config.pathGuiding) {
+        AABB sceneBounds;
+        if (scene.getGroup() != nullptr && scene.getGroup()->getBoundingBox(sceneBounds)) {
+            pathGuideGrid = std::make_unique<PathGuideGrid>(
+                sceneBounds,
+                config.pathGuidingGridResolution,
+                config.pathGuidingMapResolution
+            );
+            std::cout << "[path guiding] grid: "
+                      << config.pathGuidingGridResolution << "^3"
+                      << ", map: " << config.pathGuidingMapResolution << "x"
+                      << config.pathGuidingMapResolution
+                      << ", maps: " << pathGuideGrid->mapCount()
+                      << ", training spp: " << config.pathGuidingTrainingSpp
+                      << ", probability: " << config.pathGuidingProbability
+                      << std::endl;
+        } else {
+            std::cout << "[path guiding] disabled: scene has no finite bounding box"
+                      << std::endl;
+        }
+    }
 
     int completedIterations = 0;
     double lastIterationSeconds = 0.0;
@@ -281,7 +305,17 @@ Image Renderer::render() {
             if (cancellationRequested(cancelRequested)) {
                 continue;
             }
-            PathTracer pathTracer(scene, config.sampleClamp);
+            bool guideActive =
+                pathGuideGrid != nullptr &&
+                completedIterations >= config.pathGuidingTrainingSpp;
+            PathTracer pathTracer(
+                scene,
+                config.sampleClamp,
+                pathGuideGrid.get(),
+                pathGuideGrid != nullptr,
+                guideActive,
+                config.pathGuidingProbability
+            );
             int renderedRows = 0;
             for (int y = 0; y < height; ++y) {
                 if ((y & 15) == 0 && cancellationRequested(cancelRequested)) {
@@ -305,6 +339,10 @@ Image Renderer::render() {
 
         if (cancellationRequested(cancelRequested)) {
             break;
+        }
+
+        if (pathGuideGrid != nullptr) {
+            pathGuideGrid->mergeTemp(config.pathGuidingForget);
         }
 
         ++completedIterations;
@@ -685,6 +723,9 @@ void Renderer::printStats(double renderSeconds, long long numPixels, long long p
     std::cout << "[render stats] resolution: " << width << "x" << height
               << ", spp: " << completedSpp
               << ", integrator: " << integratorName(config.integrator);
+    if (config.integrator == IntegratorType::PT && config.pathGuiding) {
+        std::cout << ", path guiding: on";
+    }
     if (hasTimeLimit(config)) {
         std::cout << ", time limit: " << config.timeLimitSeconds << " s";
     }

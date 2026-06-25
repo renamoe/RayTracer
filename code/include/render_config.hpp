@@ -12,6 +12,11 @@ constexpr float DEFAULT_VCM_RADIUS = 0.01f;
 constexpr int DEFAULT_VCM_CAMERA_PATH_DEPTH = 8;
 constexpr int DEFAULT_VCM_LIGHT_PATH_DEPTH = 5;
 constexpr float DEFAULT_SAMPLE_CLAMP = 0.0f;
+constexpr int DEFAULT_PATH_GUIDING_TRAINING_SPP = 32;
+constexpr int DEFAULT_PATH_GUIDING_GRID_RESOLUTION = 8;
+constexpr int DEFAULT_PATH_GUIDING_MAP_RESOLUTION = 32;
+constexpr float DEFAULT_PATH_GUIDING_PROBABILITY = 0.5f;
+constexpr float DEFAULT_PATH_GUIDING_FORGET = 0.98f;
 
 enum class IntegratorType {
     PT,
@@ -37,6 +42,13 @@ struct RenderConfig {
     int vcmLightPathDepth = DEFAULT_VCM_LIGHT_PATH_DEPTH;
     int vcmLightPathCount = 0;
     bool vcmCausticOnlyMerging = true;
+
+    bool pathGuiding = false;
+    int pathGuidingTrainingSpp = DEFAULT_PATH_GUIDING_TRAINING_SPP;
+    int pathGuidingGridResolution = DEFAULT_PATH_GUIDING_GRID_RESOLUTION;
+    int pathGuidingMapResolution = DEFAULT_PATH_GUIDING_MAP_RESOLUTION;
+    float pathGuidingProbability = DEFAULT_PATH_GUIDING_PROBABILITY;
+    float pathGuidingForget = DEFAULT_PATH_GUIDING_FORGET;
 
     IntegratorType integrator = IntegratorType::PT;
 };

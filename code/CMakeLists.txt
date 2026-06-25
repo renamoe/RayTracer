@@ -19,6 +19,7 @@ SET(RayTracer_SOURCES
         src/material.cpp
         src/main.cpp
         src/mesh.cpp
+        src/path_guiding.cpp
         src/path_tracer.cpp
         src/preview_window.cpp
         src/plane.cpp
@@ -47,6 +48,7 @@ SET(RayTracer_INCLUDES
         include/material.hpp
         include/mesh.hpp
         include/object3d.hpp
+        include/path_guiding.hpp
         include/path_tracer.hpp
         include/preview_window.hpp
         include/plane.hpp

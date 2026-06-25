@@ -4,6 +4,7 @@
 #include "group.hpp"
 #include "light.hpp"
 #include "material.hpp"
+#include "path_guiding.hpp"
 #include "random.hpp"
 #include "scene_parser.hpp"
 
@@ -34,6 +35,15 @@ Vector3f clampLuminance(const Vector3f &c, float maxLum) {
     return c;
 }
 
+float luminance(const Vector3f &c) {
+    if (!std::isfinite(c.x()) ||
+        !std::isfinite(c.y()) ||
+        !std::isfinite(c.z())) {
+        return 0.0f;
+    }
+    return 0.2126f * c.x() + 0.7152f * c.y() + 0.0722f * c.z();
+}
+
 Vector3f offsetRayOrigin(const Vector3f &pos,
                          const Vector3f &normal,
                          const Vector3f &dir) {
@@ -42,8 +52,18 @@ Vector3f offsetRayOrigin(const Vector3f &pos,
 
 } // namespace
 
-PathTracer::PathTracer(SceneParser &scene, float specularClamp)
-    : scene(scene), specularClamp(specularClamp) {}
+PathTracer::PathTracer(SceneParser &scene,
+                       float specularClamp,
+                       PathGuideGrid *pathGuideGrid,
+                       bool trainPathGuiding,
+                       bool usePathGuiding,
+                       float pathGuidingProbability)
+    : scene(scene),
+      specularClamp(specularClamp),
+      pathGuideGrid(pathGuideGrid),
+      trainPathGuiding(trainPathGuiding),
+      usePathGuiding(usePathGuiding),
+      pathGuidingProbability(std::max(0.0f, std::min(1.0f, pathGuidingProbability))) {}
 
 Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
                                                const Vector3f &normal,
@@ -83,6 +103,101 @@ Vector3f PathTracer::estimateGlossyDirectLight(const Vector3f &pos,
     float wLight = powerHeuristic(pdfLight, pdfBrdf);
 
     return lightSample.col * f_r * cosThetaX / pdfLight * wLight;
+}
+
+float PathTracer::activeGuideProbability(Material *material,
+                                         const Vector3f &pos,
+                                         const Vector3f &normal) const {
+    if (!usePathGuiding || pathGuideGrid == nullptr || !pathGuideGrid->isValid() ||
+        material == nullptr || material->isDelta()) {
+        return 0.0f;
+    }
+    if (!pathGuideGrid->hasSamples(pos, normal)) {
+        return 0.0f;
+    }
+    return pathGuidingProbability;
+}
+
+float PathTracer::continuationPdf(Material *material,
+                                  const Vector3f &pos,
+                                  const Vector3f &normal,
+                                  const Vector3f &wo,
+                                  const Vector3f &wi) const {
+    float pdfBsdf = bsdfPdf(material, normal, wo, wi);
+    float guideProb = activeGuideProbability(material, pos, normal);
+    if (guideProb <= 0.0f) {
+        return pdfBsdf;
+    }
+
+    float pdfGuide = pathGuideGrid->pdf(pos, normal, wi);
+    return (1.0f - guideProb) * pdfBsdf + guideProb * pdfGuide;
+}
+
+BSDFSample PathTracer::sampleGuidedBSDF(Material *material,
+                                        const Vector3f &diffuseColor,
+                                        const Vector3f &pos,
+                                        const Vector3f &normal,
+                                        const Vector3f &wo) const {
+    BSDFSample result{Vector3f::ZERO, Vector3f::ZERO, 0.0f, false};
+
+    float guideProb = activeGuideProbability(material, pos, normal);
+    if (guideProb <= 0.0f) {
+        return sampleBSDF(material, diffuseColor, normal, wo);
+    }
+
+    Vector3f wi = Vector3f::ZERO;
+    float pdfBsdf = 0.0f;
+    float pdfGuide = 0.0f;
+
+    if (Random::get_float() < guideProb) {
+        PathGuideSample guideSample = pathGuideGrid->sample(pos, normal);
+        if (!guideSample.valid || guideSample.pdf <= 0.0f) {
+            return result;
+        }
+        wi = guideSample.dir;
+        pdfGuide = guideSample.pdf;
+        pdfBsdf = bsdfPdf(material, normal, wo, wi);
+    } else {
+        BSDFSample bsdfSample = sampleBSDF(material, diffuseColor, normal, wo);
+        if (bsdfSample.pdf <= 0.0f ||
+            bsdfSample.throughputWeight.squaredLength() <= 0.0f) {
+            return result;
+        }
+        wi = bsdfSample.wi;
+        pdfBsdf = bsdfSample.pdf;
+        pdfGuide = pathGuideGrid->pdf(pos, normal, wi);
+    }
+
+    float pdfMix = (1.0f - guideProb) * pdfBsdf + guideProb * pdfGuide;
+    float cosTheta = std::max(0.0f, Vector3f::dot(normal, wi));
+    Vector3f f = evaluateBSDF(material, diffuseColor, normal, wo, wi);
+    if (pdfMix <= 0.0f || cosTheta <= 0.0f ||
+        f.squaredLength() <= 0.0f || !isFiniteColor(f)) {
+        return result;
+    }
+
+    result.wi = wi;
+    result.throughputWeight = f * cosTheta / std::max(pdfMix, 1e-6f);
+    result.pdf = pdfMix;
+    result.isDelta = false;
+    return result;
+}
+
+void PathTracer::recordGuidingSample(Material *material,
+                                     const Vector3f &pos,
+                                     const Vector3f &normal,
+                                     const Vector3f &wi,
+                                     const Vector3f &incoming) const {
+    if (!trainPathGuiding || pathGuideGrid == nullptr || !pathGuideGrid->isValid() ||
+        material == nullptr || material->isDelta()) {
+        return;
+    }
+
+    float value = luminance(incoming);
+    if (value <= 0.0f) {
+        return;
+    }
+    pathGuideGrid->record(pos, normal, wi, value);
 }
 
 Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, bool fromSpecular) {
@@ -194,9 +309,9 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
             float cosThetaY = std::max(0.0f, Vector3f::dot(sample.normal, -sample.dir));
             Vector3f f_r = evaluateBSDF(material, albedo, shadingNormal, wo, lightDir);
             float pdfLight = areaPdfToSolidAnglePdf(sample.pdf, sample.dist, cosThetaY);
-            float pdfBrdf = bsdfPdf(material, shadingNormal, wo, lightDir);
+            float pdfPath = continuationPdf(material, pos, shadingNormal, wo, lightDir);
             if (pdfLight > 0.0f && f_r.squaredLength() > 0.0f) {
-                float wLight = powerHeuristic(pdfLight, pdfBrdf);
+                float wLight = powerHeuristic(pdfLight, pdfPath);
                 direct = sample.col * f_r * cosThetaX / pdfLight * wLight;
             }
         }
@@ -207,7 +322,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         return emission + direct;
     }
 
-    BSDFSample bsdfSample = sampleBSDF(material, albedo, shadingNormal, wo);
+    BSDFSample bsdfSample = sampleGuidedBSDF(material, albedo, pos, shadingNormal, wo);
     if (bsdfSample.pdf <= 0.0f || bsdfSample.throughputWeight.squaredLength() <= 0.0f) {
         return emission + direct;
     }
@@ -222,7 +337,9 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
     if (hitLight) {
         float pdfLight = scene.lightPdfFromHit(nextHit, bsdfSample.wi);
         float wBrdf = powerHeuristic(bsdfSample.pdf, pdfLight);
-        brdfLight = nextHit.getMaterial()->getEmission() * bsdfSample.throughputWeight * wBrdf / rrProb;
+        Vector3f lightEmission = nextHit.getMaterial()->getEmission();
+        recordGuidingSample(material, pos, shadingNormal, bsdfSample.wi, lightEmission);
+        brdfLight = lightEmission * bsdfSample.throughputWeight * wBrdf / rrProb;
     }
 
     Vector3f indirect = Vector3f::ZERO;
@@ -230,6 +347,7 @@ Vector3f PathTracer::traceFromHit(const Ray &ray, const Hit &hit, int depth, boo
         Vector3f incoming = nextIntersects
             ? traceFromHit(nextRay, nextHit, depth + 1)
             : scene.getBackgroundColor();
+        recordGuidingSample(material, pos, shadingNormal, bsdfSample.wi, incoming);
         indirect = incoming * bsdfSample.throughputWeight / rrProb;
     }
 

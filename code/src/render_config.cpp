@@ -22,7 +22,13 @@ void printUsage() {
               << "[-vcm-caustic-only|-vcm-all-merging] "
               << "[-bdpt-direct samples] "
               << "[-bdpt-direct-primary samples] "
-              << "[-bdpt-direct-secondary samples]" << std::endl;
+              << "[-bdpt-direct-secondary samples] "
+              << "[--path-guiding] "
+              << "[--pg-train-spp spp] "
+              << "[--pg-prob probability] "
+              << "[--pg-grid resolution] "
+              << "[--pg-map resolution] "
+              << "[--pg-forget factor]" << std::endl;
 }
 
 bool parsePositiveInt(const char *text, int &value) {
@@ -59,6 +65,17 @@ bool parseNonNegativeFloat(const char *text, float &value) {
     char *end = nullptr;
     float parsed = std::strtof(text, &end);
     if (end == text || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0f) {
+        return false;
+    }
+    value = parsed;
+    return true;
+}
+
+bool parseUnitFloat(const char *text, float &value) {
+    char *end = nullptr;
+    float parsed = std::strtof(text, &end);
+    if (end == text || *end != '\0' || !std::isfinite(parsed) ||
+        parsed < 0.0f || parsed > 1.0f) {
         return false;
     }
     value = parsed;
@@ -149,6 +166,43 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
             config.integrator = IntegratorType::BDPT;
         } else if (arg == "-vcm") {
             config.integrator = IntegratorType::VCM;
+        } else if (arg == "--path-guiding" || arg == "-path-guiding") {
+            config.pathGuiding = true;
+        } else if (arg == "--pg-train-spp" || arg == "-pg-train-spp") {
+            if (i + 1 >= argc ||
+                !parseNonNegativeInt(argv[++i], config.pathGuidingTrainingSpp)) {
+                std::cout << "path guiding training spp must be a non-negative integer" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
+        } else if (arg == "--pg-prob" || arg == "-pg-prob") {
+            if (i + 1 >= argc ||
+                !parseUnitFloat(argv[++i], config.pathGuidingProbability)) {
+                std::cout << "path guiding probability must be in [0, 1]" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
+        } else if (arg == "--pg-grid" || arg == "-pg-grid") {
+            if (i + 1 >= argc ||
+                !parsePositiveInt(argv[++i], config.pathGuidingGridResolution)) {
+                std::cout << "path guiding grid resolution must be a positive integer" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
+        } else if (arg == "--pg-map" || arg == "-pg-map") {
+            if (i + 1 >= argc ||
+                !parsePositiveInt(argv[++i], config.pathGuidingMapResolution)) {
+                std::cout << "path guiding map resolution must be a positive integer" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
+        } else if (arg == "--pg-forget" || arg == "-pg-forget") {
+            if (i + 1 >= argc ||
+                !parseUnitFloat(argv[++i], config.pathGuidingForget)) {
+                std::cout << "path guiding forget factor must be in [0, 1]" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
         } else if (arg == "-vcm-radius" || arg == "--vcm-radius") {
             if (i + 1 >= argc || !parsePositiveFloat(argv[++i], config.vcmRadius)) {
                 std::cout << "vcm radius must be a positive number" << std::endl;
@@ -223,6 +277,15 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
         std::cout << "sample clamp luminance: " << config.sampleClamp << std::endl;
     }
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
+    if (config.pathGuiding) {
+        std::cout << "path guiding: enabled for PT, training spp="
+                  << config.pathGuidingTrainingSpp
+                  << ", probability=" << config.pathGuidingProbability
+                  << ", grid=" << config.pathGuidingGridResolution
+                  << "^3, map=" << config.pathGuidingMapResolution
+                  << "x" << config.pathGuidingMapResolution
+                  << ", forget=" << config.pathGuidingForget << std::endl;
+    }
     if (config.preview) {
         std::cout << "preview: every " << config.previewEveryIterations
                   << " iteration(s)" << std::endl;
