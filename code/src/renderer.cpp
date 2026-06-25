@@ -187,6 +187,25 @@ bool pollPreviewEventsDuringWork(PreviewWindow *preview,
     return refreshCancellationFromPreview(preview, cancelRequested);
 }
 
+float pathGuidingProbabilityForIteration(const RenderConfig &config, int iteration) {
+    if (!config.pathGuiding || config.pathGuidingPMax <= 0.0f) {
+        return 0.0f;
+    }
+
+    int s0 = config.pathGuidingS0;
+    int s1 = config.pathGuidingS1;
+    if (iteration < s0) {
+        return 0.0f;
+    }
+    if (s1 <= s0 || iteration >= s1) {
+        return config.pathGuidingPMax;
+    }
+
+    float t = static_cast<float>(iteration - s0) /
+              static_cast<float>(s1 - s0);
+    return config.pathGuidingPMax * std::max(0.0f, std::min(1.0f, t));
+}
+
 Vector3f clampLuminance(const Vector3f &color, float maxLum) {
     if (!std::isfinite(color.x()) ||
         !std::isfinite(color.y()) ||
@@ -285,8 +304,9 @@ Image Renderer::render() {
                       << ", map: " << config.pathGuidingMapResolution << "x"
                       << config.pathGuidingMapResolution
                       << ", maps: " << pathGuideGrid->mapCount()
-                      << ", training spp: " << config.pathGuidingTrainingSpp
-                      << ", probability: " << config.pathGuidingProbability
+                      << ", s0: " << config.pathGuidingS0
+                      << ", s1: " << config.pathGuidingS1
+                      << ", pmax: " << config.pathGuidingPMax
                       << std::endl;
         } else {
             std::cout << "[path guiding] disabled: scene has no finite bounding box"
@@ -305,16 +325,17 @@ Image Renderer::render() {
             if (cancellationRequested(cancelRequested)) {
                 continue;
             }
-            bool guideActive =
-                pathGuideGrid != nullptr &&
-                completedIterations >= config.pathGuidingTrainingSpp;
+            float activeGuideProbability =
+                pathGuideGrid != nullptr
+                    ? pathGuidingProbabilityForIteration(config, completedIterations)
+                    : 0.0f;
             PathTracer pathTracer(
                 scene,
                 config.sampleClamp,
                 pathGuideGrid.get(),
                 pathGuideGrid != nullptr,
-                guideActive,
-                config.pathGuidingProbability
+                activeGuideProbability > 0.0f,
+                activeGuideProbability
             );
             int renderedRows = 0;
             for (int y = 0; y < height; ++y) {

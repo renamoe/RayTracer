@@ -24,8 +24,9 @@ void printUsage() {
               << "[-bdpt-direct-primary samples] "
               << "[-bdpt-direct-secondary samples] "
               << "[--path-guiding] "
-              << "[--pg-train-spp spp] "
-              << "[--pg-prob probability] "
+              << "[--pg-s0 iteration] "
+              << "[--pg-s1 iteration] "
+              << "[--pg-pmax probability] "
               << "[--pg-grid resolution] "
               << "[--pg-map resolution] "
               << "[--pg-forget factor]" << std::endl;
@@ -168,17 +169,26 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
             config.integrator = IntegratorType::VCM;
         } else if (arg == "--path-guiding" || arg == "-path-guiding") {
             config.pathGuiding = true;
-        } else if (arg == "--pg-train-spp" || arg == "-pg-train-spp") {
+        } else if (arg == "--pg-s0" || arg == "-pg-s0" ||
+                   arg == "--pg-train-spp" || arg == "-pg-train-spp") {
             if (i + 1 >= argc ||
-                !parseNonNegativeInt(argv[++i], config.pathGuidingTrainingSpp)) {
-                std::cout << "path guiding training spp must be a non-negative integer" << std::endl;
+                !parseNonNegativeInt(argv[++i], config.pathGuidingS0)) {
+                std::cout << "path guiding s0 must be a non-negative integer" << std::endl;
                 return false;
             }
             config.pathGuiding = true;
-        } else if (arg == "--pg-prob" || arg == "-pg-prob") {
+        } else if (arg == "--pg-s1" || arg == "-pg-s1") {
             if (i + 1 >= argc ||
-                !parseUnitFloat(argv[++i], config.pathGuidingProbability)) {
-                std::cout << "path guiding probability must be in [0, 1]" << std::endl;
+                !parseNonNegativeInt(argv[++i], config.pathGuidingS1)) {
+                std::cout << "path guiding s1 must be a non-negative integer" << std::endl;
+                return false;
+            }
+            config.pathGuiding = true;
+        } else if (arg == "--pg-pmax" || arg == "-pg-pmax" ||
+                   arg == "--pg-prob" || arg == "-pg-prob") {
+            if (i + 1 >= argc ||
+                !parseUnitFloat(argv[++i], config.pathGuidingPMax)) {
+                std::cout << "path guiding pmax must be in [0, 1]" << std::endl;
                 return false;
             }
             config.pathGuiding = true;
@@ -266,6 +276,11 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     config.inputFile = positionalArgs[0];
     config.outputFile = positionalArgs[1];
 
+    if (config.pathGuiding && config.pathGuidingS1 < config.pathGuidingS0) {
+        std::cout << "path guiding s1 must be greater than or equal to s0" << std::endl;
+        return false;
+    }
+
     if (config.timeLimitSeconds > 0.0) {
         std::cout << "num samples per pixel: time-limited" << std::endl;
         std::cout << "time limit: " << config.timeLimitSeconds << " s" << std::endl;
@@ -278,9 +293,10 @@ bool parseRenderConfig(int argc, char *argv[], RenderConfig &config) {
     }
     std::cout << "integrator: " << integratorName(config.integrator) << std::endl;
     if (config.pathGuiding) {
-        std::cout << "path guiding: enabled for PT, training spp="
-                  << config.pathGuidingTrainingSpp
-                  << ", probability=" << config.pathGuidingProbability
+        std::cout << "path guiding: enabled for PT, s0="
+                  << config.pathGuidingS0
+                  << ", s1=" << config.pathGuidingS1
+                  << ", pmax=" << config.pathGuidingPMax
                   << ", grid=" << config.pathGuidingGridResolution
                   << "^3, map=" << config.pathGuidingMapResolution
                   << "x" << config.pathGuidingMapResolution
