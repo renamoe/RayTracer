@@ -3,7 +3,9 @@
 #include "Vector3f.h"
 #include "aabb.hpp"
 
+#include <atomic>
 #include <cstddef>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -86,6 +88,7 @@ private:
     int mapIndex(const Vector3f &pos, const Vector3f &normal) const;
     int normalFacet(const Vector3f &normal) const;
     void computeSolidAngles();
+    void markDirty(int mapIdx);
 
     bool valid = false;
     AABB bounds;
@@ -96,5 +99,8 @@ private:
 
     std::vector<float> solidAngle;
     std::vector<GuideMap> maps;
-    mutable std::mutex recordMutex;
+    std::vector<std::unique_ptr<std::mutex>> mapMutexes;
+    std::vector<std::unique_ptr<std::atomic_bool>> dirtyFlags;
+    std::vector<int> dirtyMapIndices;
+    mutable std::mutex dirtyMapsMutex;
 };

@@ -339,8 +339,15 @@ void PathGuideGrid::initialize(const AABB &sceneBounds,
 
     std::size_t totalMaps = static_cast<std::size_t>(nx) * ny * nz * NORMAL_FACET_COUNT;
     maps.resize(totalMaps);
+    mapMutexes.clear();
+    dirtyFlags.clear();
+    dirtyMapIndices.clear();
+    mapMutexes.reserve(totalMaps);
+    dirtyFlags.reserve(totalMaps);
     for (GuideMap &map : maps) {
         map.initialize(mapRes);
+        mapMutexes.push_back(std::make_unique<std::mutex>());
+        dirtyFlags.push_back(std::make_unique<std::atomic_bool>(false));
     }
 
     valid = !maps.empty() && !solidAngle.empty();
@@ -397,7 +404,8 @@ void PathGuideGrid::record(const Vector3f &pos,
         return;
     }
 
-    std::lock_guard<std::mutex> lock(recordMutex);
+    markDirty(idx);
+    std::lock_guard<std::mutex> lock(*mapMutexes[idx]);
     maps[idx].record(dir, value);
 }
 
@@ -406,9 +414,19 @@ void PathGuideGrid::mergeTemp(float forget) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(recordMutex);
-    for (GuideMap &map : maps) {
-        map.mergeTemp(forget);
+    std::vector<int> dirtyMaps;
+    {
+        std::lock_guard<std::mutex> lock(dirtyMapsMutex);
+        dirtyMaps.swap(dirtyMapIndices);
+    }
+
+    for (int idx : dirtyMaps) {
+        if (idx < 0 || idx >= static_cast<int>(maps.size())) {
+            continue;
+        }
+        std::lock_guard<std::mutex> lock(*mapMutexes[idx]);
+        maps[idx].mergeTemp(forget);
+        dirtyFlags[idx]->store(false, std::memory_order_release);
     }
 }
 
@@ -450,6 +468,20 @@ int PathGuideGrid::normalFacet(const Vector3f &normal) const {
         return n.y() >= 0.0f ? 2 : 3;
     }
     return n.z() >= 0.0f ? 4 : 5;
+}
+
+void PathGuideGrid::markDirty(int mapIdx) {
+    if (mapIdx < 0 || mapIdx >= static_cast<int>(dirtyFlags.size())) {
+        return;
+    }
+
+    bool wasDirty = dirtyFlags[mapIdx]->exchange(true, std::memory_order_acq_rel);
+    if (wasDirty) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(dirtyMapsMutex);
+    dirtyMapIndices.push_back(mapIdx);
 }
 
 void PathGuideGrid::computeSolidAngles() {
