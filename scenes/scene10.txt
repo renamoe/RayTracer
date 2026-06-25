@@ -1,0 +1,1742 @@
+PerspectiveCamera {
+    center 0.30 0.90 2.25
+    direction -0.15 -0.08 -1.00
+    up 0 1 0
+    angle 43
+    width 1920
+    height 1080
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 129
+    Material {
+        diffuseColor 0.76 0.75 0.69
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.58 0.13 0.32
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.06 0.60 0.56
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 1.00 0.94 0.80
+        specularColor 0 0 0
+        emission 95 82 64
+        shininess 0
+    }
+    Material {
+        diffuseColor 0.06 0.68 0.10
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.12 0.64 0.22
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.59 0.34
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.24 0.55 0.46
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.30 0.50 0.58
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.08 0.71 0.13
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.14 0.67 0.24
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.20 0.62 0.36
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.27 0.58 0.48
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.33 0.53 0.60
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.11 0.74 0.15
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.17 0.70 0.27
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.23 0.65 0.39
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.29 0.60 0.51
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.35 0.56 0.63
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.14 0.77 0.18
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.20 0.72 0.30
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.26 0.68 0.41
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.32 0.64 0.53
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.38 0.59 0.66
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.16 0.80 0.20
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.22 0.76 0.32
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.28 0.71 0.44
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.34 0.67 0.56
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.40 0.62 0.68
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.07 0.66 0.15
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.13 0.61 0.27
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.19 0.57 0.38
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.25 0.53 0.51
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.31 0.48 0.63
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.09 0.69 0.17
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.15 0.65 0.29
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.21 0.60 0.41
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.28 0.56 0.53
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.34 0.51 0.65
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.12 0.72 0.20
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.68 0.32
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.24 0.63 0.43
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.30 0.58 0.56
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.36 0.54 0.68
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.15 0.75 0.22
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.21 0.70 0.34
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.27 0.66 0.46
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.33 0.61 0.58
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.39 0.57 0.70
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.17 0.78 0.24
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.23 0.73 0.36
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.29 0.69 0.48
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.35 0.65 0.60
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.41 0.60 0.72
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.08 0.64 0.19
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.14 0.59 0.31
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.20 0.55 0.43
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.26 0.51 0.55
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.32 0.46 0.67
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.10 0.67 0.21
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.16 0.63 0.33
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.22 0.58 0.45
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.29 0.54 0.57
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.35 0.49 0.69
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.13 0.70 0.24
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.19 0.66 0.36
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.25 0.61 0.48
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.31 0.56 0.60
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.37 0.52 0.72
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.15 0.73 0.27
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.21 0.68 0.39
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.28 0.64 0.51
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.34 0.59 0.62
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.40 0.55 0.74
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.76 0.29
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.24 0.71 0.41
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.30 0.67 0.53
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.36 0.63 0.65
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.42 0.58 0.77
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.09 0.62 0.24
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.15 0.57 0.35
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.21 0.53 0.47
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.27 0.49 0.59
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.33 0.44 0.71
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.11 0.65 0.26
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.17 0.60 0.38
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.23 0.56 0.50
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.30 0.52 0.62
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.35 0.47 0.74
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.14 0.68 0.29
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.20 0.64 0.41
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.26 0.59 0.52
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.32 0.54 0.65
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.38 0.50 0.77
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.17 0.71 0.31
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.23 0.67 0.43
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.29 0.62 0.55
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.34 0.57 0.67
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.41 0.53 0.79
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.19 0.74 0.34
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.25 0.70 0.46
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.31 0.65 0.57
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.37 0.60 0.69
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.43 0.56 0.81
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.10 0.60 0.28
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.16 0.56 0.40
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.22 0.51 0.52
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.28 0.47 0.64
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.34 0.42 0.76
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.13 0.63 0.30
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.59 0.42
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.24 0.54 0.54
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.30 0.50 0.67
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.36 0.45 0.78
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.15 0.66 0.33
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.21 0.62 0.45
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.27 0.57 0.57
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.33 0.53 0.69
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.39 0.48 0.81
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.18 0.69 0.35
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.24 0.65 0.48
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.29 0.60 0.59
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.35 0.56 0.71
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.41 0.51 0.83
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.20 0.72 0.38
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.26 0.68 0.50
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.32 0.63 0.62
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.38 0.59 0.74
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 0.44 0.54 0.86
+        specularColor 0 0 0
+        shininess 10
+    }
+}
+
+Group {
+    numObjects 138
+    MaterialIndex 0
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 1.00 0.00 3.00
+        vertex2 1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 1.00 0.00 -1.04
+        vertex2 -1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 1.59 3.00
+        vertex1 1.00 1.59 -1.04
+        vertex2 1.00 1.59 3.00
+    }
+    Triangle {
+        vertex0 -1.00 1.59 3.00
+        vertex1 -1.00 1.59 -1.04
+        vertex2 1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 -1.04
+        vertex1 1.00 0.00 -1.04
+        vertex2 1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 -1.04
+        vertex1 1.00 1.59 -1.04
+        vertex2 -1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 1.00 1.59 3.00
+        vertex2 1.00 0.00 3.00
+    }
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 -1.00 1.59 3.00
+        vertex2 1.00 1.59 3.00
+    }
+    MaterialIndex 1
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 -1.00 0.00 -1.04
+        vertex2 -1.00 1.59 -1.04
+    }
+    Triangle {
+        vertex0 -1.00 0.00 3.00
+        vertex1 -1.00 1.59 -1.04
+        vertex2 -1.00 1.59 3.00
+    }
+    MaterialIndex 2
+    Triangle {
+        vertex0 1.00 0.00 3.00
+        vertex1 1.00 1.59 -1.04
+        vertex2 1.00 0.00 -1.04
+    }
+    Triangle {
+        vertex0 1.00 0.00 3.00
+        vertex1 1.00 1.59 3.00
+        vertex2 1.00 1.59 -1.04
+    }
+    MaterialIndex 3
+    Transform {
+        Translate 0.00 1.585 0.15
+        XRotate 90
+        Scale 0.1 0.1 1
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+    MaterialIndex 4
+    Transform {
+        Translate -0.576 0.352 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 5
+    Transform {
+        Translate -0.288 0.352 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 6
+    Transform {
+        Translate 0.000 0.352 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 7
+    Transform {
+        Translate 0.288 0.352 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 8
+    Transform {
+        Translate 0.576 0.352 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 9
+    Transform {
+        Translate -0.576 0.576 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 10
+    Transform {
+        Translate -0.288 0.576 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 11
+    Transform {
+        Translate 0.000 0.576 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 12
+    Transform {
+        Translate 0.288 0.576 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 13
+    Transform {
+        Translate 0.576 0.576 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 14
+    Transform {
+        Translate -0.576 0.800 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 15
+    Transform {
+        Translate -0.288 0.800 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 16
+    Transform {
+        Translate 0.000 0.800 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 17
+    Transform {
+        Translate 0.288 0.800 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 18
+    Transform {
+        Translate 0.576 0.800 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 19
+    Transform {
+        Translate -0.576 1.024 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 20
+    Transform {
+        Translate -0.288 1.024 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 21
+    Transform {
+        Translate 0.000 1.024 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 22
+    Transform {
+        Translate 0.288 1.024 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 23
+    Transform {
+        Translate 0.576 1.024 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 24
+    Transform {
+        Translate -0.576 1.248 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 25
+    Transform {
+        Translate -0.288 1.248 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 26
+    Transform {
+        Translate 0.000 1.248 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 27
+    Transform {
+        Translate 0.288 1.248 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 28
+    Transform {
+        Translate 0.576 1.248 0.416
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 29
+    Transform {
+        Translate -0.576 0.352 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 30
+    Transform {
+        Translate -0.288 0.352 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 31
+    Transform {
+        Translate 0.000 0.352 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 32
+    Transform {
+        Translate 0.288 0.352 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 33
+    Transform {
+        Translate 0.576 0.352 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 34
+    Transform {
+        Translate -0.576 0.576 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 35
+    Transform {
+        Translate -0.288 0.576 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 36
+    Transform {
+        Translate 0.000 0.576 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 37
+    Transform {
+        Translate 0.288 0.576 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 38
+    Transform {
+        Translate 0.576 0.576 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 39
+    Transform {
+        Translate -0.576 0.800 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 40
+    Transform {
+        Translate -0.288 0.800 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 41
+    Transform {
+        Translate 0.000 0.800 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 42
+    Transform {
+        Translate 0.288 0.800 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 43
+    Transform {
+        Translate 0.576 0.800 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 44
+    Transform {
+        Translate -0.576 1.024 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 45
+    Transform {
+        Translate -0.288 1.024 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 46
+    Transform {
+        Translate 0.000 1.024 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 47
+    Transform {
+        Translate 0.288 1.024 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 48
+    Transform {
+        Translate 0.576 1.024 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 49
+    Transform {
+        Translate -0.576 1.248 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 50
+    Transform {
+        Translate -0.288 1.248 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 51
+    Transform {
+        Translate 0.000 1.248 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 52
+    Transform {
+        Translate 0.288 1.248 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 53
+    Transform {
+        Translate 0.576 1.248 0.128
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 54
+    Transform {
+        Translate -0.576 0.352 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 55
+    Transform {
+        Translate -0.288 0.352 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 56
+    Transform {
+        Translate 0.000 0.352 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 57
+    Transform {
+        Translate 0.288 0.352 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 58
+    Transform {
+        Translate 0.576 0.352 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 59
+    Transform {
+        Translate -0.576 0.576 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 60
+    Transform {
+        Translate -0.288 0.576 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 61
+    Transform {
+        Translate 0.000 0.576 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 62
+    Transform {
+        Translate 0.288 0.576 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 63
+    Transform {
+        Translate 0.576 0.576 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 64
+    Transform {
+        Translate -0.576 0.800 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 65
+    Transform {
+        Translate -0.288 0.800 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 66
+    Transform {
+        Translate 0.000 0.800 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 67
+    Transform {
+        Translate 0.288 0.800 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 68
+    Transform {
+        Translate 0.576 0.800 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 69
+    Transform {
+        Translate -0.576 1.024 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 70
+    Transform {
+        Translate -0.288 1.024 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 71
+    Transform {
+        Translate 0.000 1.024 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 72
+    Transform {
+        Translate 0.288 1.024 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 73
+    Transform {
+        Translate 0.576 1.024 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 74
+    Transform {
+        Translate -0.576 1.248 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 75
+    Transform {
+        Translate -0.288 1.248 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 76
+    Transform {
+        Translate 0.000 1.248 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 77
+    Transform {
+        Translate 0.288 1.248 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 78
+    Transform {
+        Translate 0.576 1.248 -0.160
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 79
+    Transform {
+        Translate -0.576 0.352 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 80
+    Transform {
+        Translate -0.288 0.352 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 81
+    Transform {
+        Translate 0.000 0.352 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 82
+    Transform {
+        Translate 0.288 0.352 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 83
+    Transform {
+        Translate 0.576 0.352 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 84
+    Transform {
+        Translate -0.576 0.576 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 85
+    Transform {
+        Translate -0.288 0.576 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 86
+    Transform {
+        Translate 0.000 0.576 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 87
+    Transform {
+        Translate 0.288 0.576 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 88
+    Transform {
+        Translate 0.576 0.576 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 89
+    Transform {
+        Translate -0.576 0.800 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 90
+    Transform {
+        Translate -0.288 0.800 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 91
+    Transform {
+        Translate 0.000 0.800 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 92
+    Transform {
+        Translate 0.288 0.800 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 93
+    Transform {
+        Translate 0.576 0.800 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 94
+    Transform {
+        Translate -0.576 1.024 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 95
+    Transform {
+        Translate -0.288 1.024 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 96
+    Transform {
+        Translate 0.000 1.024 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 97
+    Transform {
+        Translate 0.288 1.024 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 98
+    Transform {
+        Translate 0.576 1.024 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 99
+    Transform {
+        Translate -0.576 1.248 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 100
+    Transform {
+        Translate -0.288 1.248 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 101
+    Transform {
+        Translate 0.000 1.248 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 102
+    Transform {
+        Translate 0.288 1.248 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 103
+    Transform {
+        Translate 0.576 1.248 -0.448
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 104
+    Transform {
+        Translate -0.576 0.352 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 105
+    Transform {
+        Translate -0.288 0.352 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 106
+    Transform {
+        Translate 0.000 0.352 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 107
+    Transform {
+        Translate 0.288 0.352 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 108
+    Transform {
+        Translate 0.576 0.352 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 109
+    Transform {
+        Translate -0.576 0.576 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 110
+    Transform {
+        Translate -0.288 0.576 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 111
+    Transform {
+        Translate 0.000 0.576 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 112
+    Transform {
+        Translate 0.288 0.576 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 113
+    Transform {
+        Translate 0.576 0.576 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 114
+    Transform {
+        Translate -0.576 0.800 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 115
+    Transform {
+        Translate -0.288 0.800 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 116
+    Transform {
+        Translate 0.000 0.800 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 117
+    Transform {
+        Translate 0.288 0.800 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 118
+    Transform {
+        Translate 0.576 0.800 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 119
+    Transform {
+        Translate -0.576 1.024 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 120
+    Transform {
+        Translate -0.288 1.024 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 121
+    Transform {
+        Translate 0.000 1.024 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 122
+    Transform {
+        Translate 0.288 1.024 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 123
+    Transform {
+        Translate 0.576 1.024 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 124
+    Transform {
+        Translate -0.576 1.248 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 125
+    Transform {
+        Translate -0.288 1.248 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 126
+    Transform {
+        Translate 0.000 1.248 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 127
+    Transform {
+        Translate 0.288 1.248 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    MaterialIndex 128
+    Transform {
+        Translate 0.576 1.248 -0.736
+        Scale 0.052 0.052 0.052
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+}
