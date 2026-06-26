@@ -1,0 +1,76 @@
+PerspectiveCamera {
+    center 0.00 0.60 2.30
+    direction 0.00 -0.05 -1.00
+    up 0 1 0
+    angle 38
+    width 1280
+    height 720
+}
+Lights {
+    numLights 0
+}
+Background {
+    color 0.0 0.0 0.0
+}
+Materials {
+    numMaterials 2
+    Material {
+        diffuseColor 0.78 0.76 0.70
+        specularColor 0 0 0
+        shininess 10
+    }
+    GlassMaterial {
+        diffuseColor 0.015 0.025 0.04
+        specularColor 0.86 0.94 1.0
+        transmissionColor 0.82 0.92 1.0
+        ior 1.52
+    }
+}
+Group {
+    numObjects 6
+    MaterialIndex 0
+    TriangleMesh {
+        obj_file mesh/scene13_box.obj
+    }
+    MaterialIndex 1
+    Transform {
+        Translate -0.60 0.29 -0.18
+        XRotate -3
+        Scale 0.15 0.012 0.28
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    Transform {
+        Translate -0.30 0.29 -0.18
+        XRotate 0
+        Scale 0.15 0.012 0.28
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    Transform {
+        Translate 0.00 0.31 -0.18
+        XRotate 5
+        Scale 0.15 0.012 0.28
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    Transform {
+        Translate 0.30 0.35 -0.18
+        XRotate 10
+        Scale 0.15 0.012 0.28
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+    Transform {
+        Translate 0.60 0.39 -0.18
+        XRotate 15
+        Scale 0.15 0.012 0.28
+        TriangleMesh {
+            obj_file mesh/cube.obj
+        }
+    }
+}

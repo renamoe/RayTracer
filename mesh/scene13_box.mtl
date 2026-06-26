@@ -1,0 +1,39 @@
+newmtl floor_wood
+Kd 1.0 1.0 1.0
+Ks 0.02 0.02 0.02
+Ns 8
+illum 2
+map_Kd salle_de_bain/textures/WoodFloor_BaseColor.jpg
+
+newmtl back_tiles
+Kd 1.0 1.0 1.0
+Ks 0.02 0.02 0.02
+Ns 12
+illum 2
+map_Kd breakfast_room/tiles.png
+
+newmtl right_green_wall
+Kd 0.12 0.48 0.16
+Ks 0.0 0.0 0.0
+Ns 10
+illum 2
+
+newmtl left_red_wall
+Kd 0.64 0.08 0.06
+Ks 0.0 0.0 0.0
+Ns 10
+illum 2
+
+newmtl ceiling_marble
+Kd 0.82 0.80 0.76
+Ks 0.02 0.02 0.02
+Ns 10
+illum 2
+map_Kd breakfast_room/marble.jpg
+
+newmtl warm_area_light
+Kd 1.0 0.88 0.66
+Ks 0.0 0.0 0.0
+Ke 26 22 16
+Ns 1
+illum 2
