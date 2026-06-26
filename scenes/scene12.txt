@@ -1,0 +1,71 @@
+PerspectiveCamera {
+    center 0.00 1.85 2.40
+    direction 0.00 -0.35 -1.00
+    up 0 1 0
+    angle 30
+    width 1280
+    height 720
+}
+
+Lights {
+    numLights 0
+}
+
+Background {
+    color 0.0 0.0 0.0
+}
+
+Materials {
+    numMaterials 3
+    Material {
+        diffuseColor 0.78 0.76 0.70
+        specularColor 0 0 0
+        shininess 10
+    }
+    Material {
+        diffuseColor 1.00 0.86 0.62
+        specularColor 0 0 0
+        emission 120 98 72
+        shininess 0
+    }
+    Material {
+        diffuseColor 0.55 0.70 1.00
+        specularColor 0 0 0
+        emission 10 14 22
+        shininess 0
+    }
+}
+
+Group {
+    numObjects 3
+    MaterialIndex 0
+    Transform {
+        Translate 0.000 0.284 -0.620
+        UniformScale 0.48
+        TriangleMesh {
+            obj_file mesh/mitsuba/mitsuba.obj
+        }
+    }
+
+    MaterialIndex 1
+    Transform {
+        Translate -1.15 1.72 0.72
+        YRotate -38
+        XRotate 128
+        Scale 0.62 0.30 1
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+
+    MaterialIndex 2
+    Transform {
+        Translate 1.35 1.24 0.50
+        YRotate 64
+        XRotate 120
+        Scale 0.30 0.18 1
+        TriangleMesh {
+            obj_file mesh/scene04_light_quad.obj
+        }
+    }
+}
